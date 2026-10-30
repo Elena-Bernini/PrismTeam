@@ -1,0 +1,18 @@
+#!/bin/bash
+#SBATCH --job-name=prism_partial_dbg
+#SBATCH --partition=all_usr_prod
+#SBATCH --qos=all_qos_dbg
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=01:00:00
+#SBATCH --output=/work/cvcs2026/PrismTeam/logs/prism_partial_%j.out
+#SBATCH --error=/work/cvcs2026/PrismTeam/logs/prism_partial_%j.err
+#SBATCH --account=cvcs2026
+
+set -euo pipefail
+module load python/3.11.11-gcc-11.4.0
+source /homes/psignorino/envs/prism_env/bin/activate
+cd /work/cvcs2026/PrismTeam/prism-cluster
+python src/run_stage.py --stage 03_partial_layout_retrieval --config config/03_partial_random.yaml "$@"

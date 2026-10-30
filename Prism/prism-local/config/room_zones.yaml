@@ -1,0 +1,19 @@
+# Semantic super-categories layered over the official Graph2Plan/RPLAN room_type_name.
+# Tune this file if the project later adopts a different taxonomy.
+Private Zone:
+  - MasterRoom
+  - ChildRoom
+  - SecondRoom
+  - GuestRoom
+  - Bathroom
+  - Wall-in
+Social Zone:
+  - LivingRoom
+  - DiningRoom
+  - Kitchen
+  - StudyRoom
+External Zone:
+  - Balcony
+Service/Circulation Zone:
+  - Entrance
+  - Storage

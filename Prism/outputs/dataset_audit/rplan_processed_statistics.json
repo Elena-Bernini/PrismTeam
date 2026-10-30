@@ -1,0 +1,60 @@
+{
+  "num_layouts": 74995,
+  "coarse_type_counts": {
+    "Bedroom": 185904,
+    "Bathroom": 90148,
+    "LivingRoom": 74995,
+    "Kitchen": 72188,
+    "Balcony": 80293,
+    "Storage": 3127,
+    "PublicArea": 2462
+  },
+  "raw_type_id_counts": {
+    "1": 74685,
+    "3": 90148,
+    "0": 74995,
+    "7": 92851,
+    "2": 72188,
+    "9": 80293,
+    "5": 3657,
+    "6": 13913,
+    "11": 3127,
+    "4": 1220,
+    "12": 971,
+    "8": 798,
+    "10": 271
+  },
+  "relation_type_counts": {
+    "above": 134178,
+    "left_below": 113162,
+    "left_of": 53482,
+    "right_above": 2897,
+    "outside": 38860,
+    "below": 153524,
+    "right_of": 49091,
+    "right_below": 106156,
+    "left_above": 66520,
+    "inside": 45767
+  },
+  "room_count_per_plan": {
+    "min": 4,
+    "max": 8,
+    "mean": 6.788679245283019,
+    "median": 7.0
+  },
+  "edge_count_per_plan": {
+    "min": 3,
+    "max": 18,
+    "mean": 10.182505500366691,
+    "median": 10.0
+  },
+  "area_by_coarse_type_mean": {
+    "Bedroom": 0.04044655869550678,
+    "Bathroom": 0.013600170472163657,
+    "LivingRoom": 0.16187599131771546,
+    "Kitchen": 0.019383849480439204,
+    "Balcony": 0.01585920083319841,
+    "Storage": 0.009194759884923649,
+    "PublicArea": 0.020384062605113346
+  }
+}

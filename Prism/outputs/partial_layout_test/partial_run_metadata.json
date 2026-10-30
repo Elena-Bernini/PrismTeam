@@ -1,0 +1,12 @@
+{
+  "processed_root": "data\\processed\\rplan",
+  "dataset_root": "data\\raw\\rplan\\extracted",
+  "outputs_root": "outputs\\partial_layout_test",
+  "num_queries": 10,
+  "top_k": 10,
+  "candidate_pool": 100,
+  "mask_strategy": "random",
+  "remove_ratio": 0.3,
+  "remove_type": null,
+  "seed": 42
+}

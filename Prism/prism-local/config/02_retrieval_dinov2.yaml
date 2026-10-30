@@ -1,0 +1,15 @@
+args:
+  dataset_root: data/raw/rplan/extracted
+  processed_root: data/processed/rplan
+  outputs_root: outputs/retrieval_dinov2
+  pipeline: vision
+  build: true
+  metric: cosine
+  faiss_index: flat
+  vision_backbone: dinov2_vitb14
+  vision_weights: imagenet
+  device: cuda
+  batch_size: 8
+  image_size: 224
+  random_queries: 10
+  top_k: 10

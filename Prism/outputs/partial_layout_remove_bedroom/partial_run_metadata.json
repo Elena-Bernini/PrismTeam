@@ -1,0 +1,12 @@
+{
+  "processed_root": "data\\processed\\rplan",
+  "dataset_root": "data\\raw\\rplan\\extracted",
+  "outputs_root": "outputs\\partial_layout_remove_bedroom",
+  "num_queries": 30,
+  "top_k": 10,
+  "candidate_pool": 300,
+  "mask_strategy": "remove_bedroom",
+  "remove_ratio": 0.3,
+  "remove_type": null,
+  "seed": 42
+}

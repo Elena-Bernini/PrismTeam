@@ -1,0 +1,6 @@
+args:
+  evaluation:
+    - outputs/evaluation_resnet50:resnet50
+    - outputs/evaluation_dinov2:dinov2_vitb14
+    - outputs/evaluation_vit:vit_base_patch16_224
+  outputs_root: outputs/evaluation_comparison

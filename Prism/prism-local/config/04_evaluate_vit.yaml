@@ -1,0 +1,5 @@
+args:
+  processed_root: data/processed/rplan
+  retrieval_root: outputs/retrieval_vit
+  outputs_root: outputs/evaluation_vit
+  top_k: 10

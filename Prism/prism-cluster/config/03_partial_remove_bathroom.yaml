@@ -1,0 +1,12 @@
+args:
+  processed_root: /work/cvcs2026/PrismTeam/data/processed/rplan
+  dataset_root: /work/cvcs2026/PrismTeam/data/raw/rplan/extracted
+  outputs_root: /work/cvcs2026/PrismTeam/outputs/partial_layout_remove_bathroom
+  build: true
+  num_queries: 30
+  mask_strategy: remove_type
+  remove_type: 3
+  candidate_pool: 300
+  top_k: 10
+  preview_limit: 20
+  seed: 42

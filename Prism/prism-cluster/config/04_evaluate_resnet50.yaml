@@ -1,0 +1,5 @@
+args:
+  processed_root: /work/cvcs2026/PrismTeam/data/processed/rplan
+  retrieval_root: /work/cvcs2026/PrismTeam/outputs/retrieval_resnet50
+  outputs_root: /work/cvcs2026/PrismTeam/outputs/evaluation_resnet50
+  top_k: 10

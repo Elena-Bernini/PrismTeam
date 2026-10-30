@@ -1,0 +1,6 @@
+args:
+  evaluation:
+    - /work/cvcs2026/PrismTeam/outputs/evaluation_resnet50:resnet50
+    - /work/cvcs2026/PrismTeam/outputs/evaluation_dinov2:dinov2_vitb14
+    - /work/cvcs2026/PrismTeam/outputs/evaluation_vit:vit_base_patch16_224
+  outputs_root: /work/cvcs2026/PrismTeam/outputs/evaluation_comparison

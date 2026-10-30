@@ -1,0 +1,50 @@
+{
+  "processed_root": "data\\processed\\rplan",
+  "retrieval_root": "outputs\\retrieval_gpu_full",
+  "outputs_root": "outputs\\evaluation_resnet50",
+  "top_k": 10,
+  "input_overview": {
+    "graph_pipeline": {
+      "num_retrieval_items": 100,
+      "num_queries": 10
+    },
+    "vision_pipeline": {
+      "num_retrieval_items": 100,
+      "num_queries": 10
+    }
+  },
+  "pipeline_summary": [
+    {
+      "pipeline": "graph_pipeline",
+      "num_results": 100,
+      "num_queries": 10,
+      "mean_faiss_similarity": 0.8351722431182861,
+      "mean_architectural_score": 0.7997584441447266,
+      "mean_room_type_count_similarity": 0.9747619047619047,
+      "mean_room_count_similarity": 0.9867857142857143,
+      "mean_room_area_by_type_similarity": 0.8632413195126137,
+      "mean_adjacency_type_similarity": 0.6798838481779658,
+      "mean_relation_id_similarity": 0.6351496542673013,
+      "mean_relation_triplet_similarity": 0.18936701954586596,
+      "mean_grid_type_similarity": 0.2937217782217782,
+      "mean_constraint_score": 0.994,
+      "hard_constraint_result_rate": 0.97
+    },
+    {
+      "pipeline": "vision_pipeline",
+      "num_results": 100,
+      "num_queries": 10,
+      "mean_faiss_similarity": 0.9744359910488128,
+      "mean_architectural_score": 0.6872442514720052,
+      "mean_room_type_count_similarity": 0.8041973304473304,
+      "mean_room_count_similarity": 0.9364285714285714,
+      "mean_room_area_by_type_similarity": 0.7434804301721623,
+      "mean_adjacency_type_similarity": 0.5927029629726999,
+      "mean_relation_id_similarity": 0.34919857477403915,
+      "mean_relation_triplet_similarity": 0.14719887891680866,
+      "mean_grid_type_similarity": 0.3394811854811855,
+      "mean_constraint_score": 0.936,
+      "hard_constraint_result_rate": 0.74
+    }
+  ]
+}

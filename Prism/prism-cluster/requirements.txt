@@ -1,0 +1,10 @@
+# CPU-side packages for prism-cluster.
+# The SLURM GPU jobs load py-torch/2.8.0-gcc-11.4.0-cuda-12.6.3, so torch/torchvision/torchaudio are not pinned here.
+numpy
+pillow
+matplotlib
+tqdm
+scikit-learn
+faiss-cpu
+PyYAML
+timm

@@ -1,0 +1,124 @@
+{
+  "pkl_keys": [
+    "__header__",
+    "__version__",
+    "__globals__",
+    "data",
+    "nameList",
+    "trainTF"
+  ],
+  "num_samples": 74995,
+  "sample_attributes": [
+    "boundary",
+    "box",
+    "edge",
+    "name",
+    "order",
+    "rBoundary"
+  ],
+  "sample_attribute_summaries": {
+    "boundary": {
+      "python_type": "<class 'numpy.ndarray'>",
+      "summary": {
+        "type": "ndarray",
+        "shape": [
+          8,
+          4
+        ],
+        "dtype": "int32",
+        "preview": [
+          143,
+          56,
+          0,
+          1,
+          155,
+          56,
+          0,
+          1
+        ]
+      }
+    },
+    "box": {
+      "python_type": "<class 'numpy.ndarray'>",
+      "summary": {
+        "type": "ndarray",
+        "shape": [
+          6,
+          5
+        ],
+        "dtype": "int32",
+        "preview": [
+          143,
+          130,
+          198,
+          201,
+          7,
+          81,
+          130,
+          143
+        ]
+      }
+    },
+    "edge": {
+      "python_type": "<class 'numpy.ndarray'>",
+      "summary": {
+        "type": "ndarray",
+        "shape": [
+          10,
+          3
+        ],
+        "dtype": "int32",
+        "preview": [
+          0,
+          4,
+          6,
+          0,
+          1,
+          7,
+          1,
+          4
+        ]
+      }
+    },
+    "name": {
+      "python_type": "<class 'str'>",
+      "summary": "42007"
+    },
+    "order": {
+      "python_type": "<class 'numpy.ndarray'>",
+      "summary": {
+        "type": "ndarray",
+        "shape": [
+          6
+        ],
+        "dtype": "uint8",
+        "preview": [
+          5,
+          6,
+          4,
+          3,
+          2,
+          1
+        ]
+      }
+    },
+    "rBoundary": {
+      "python_type": "<class 'numpy.ndarray'>",
+      "summary": {
+        "type": "ndarray",
+        "shape": [
+          6
+        ],
+        "dtype": "object",
+        "preview_types": [
+          "<class 'numpy.ndarray'>",
+          "<class 'numpy.ndarray'>",
+          "<class 'numpy.ndarray'>",
+          "<class 'numpy.ndarray'>",
+          "<class 'numpy.ndarray'>",
+          "<class 'numpy.ndarray'>"
+        ]
+      }
+    }
+  }
+}

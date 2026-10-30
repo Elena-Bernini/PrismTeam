@@ -1,0 +1,151 @@
+{
+  "query_id": "860",
+  "visible_room_ids": [
+    0,
+    1,
+    2,
+    4,
+    5
+  ],
+  "removed_room_ids": [
+    3
+  ],
+  "num_visible_rooms": 5,
+  "num_removed_rooms": 1,
+  "candidate_pool": 300,
+  "top_k": 10,
+  "original_rank_in_candidate_pool": 1,
+  "original_recovered_at_k": true,
+  "results": [
+    {
+      "id": "860",
+      "compatibility_score": 0.9832956179293538,
+      "room_coverage": 1.0,
+      "adjacency_coverage": 1.0,
+      "relation_coverage": 1.0,
+      "grid_coverage": 1.0,
+      "size_compatibility": 0.8464817248906141,
+      "faiss_similarity": 0.9729489088058472,
+      "hard_constraints_satisfied": 1.0,
+      "retrieved_original": true,
+      "rank": 1
+    },
+    {
+      "id": "848",
+      "compatibility_score": 0.9832956179293538,
+      "room_coverage": 1.0,
+      "adjacency_coverage": 1.0,
+      "relation_coverage": 1.0,
+      "grid_coverage": 1.0,
+      "size_compatibility": 0.8464817248906141,
+      "faiss_similarity": 0.9729489088058472,
+      "hard_constraints_satisfied": 1.0,
+      "retrieved_original": false,
+      "rank": 2
+    },
+    {
+      "id": "827",
+      "compatibility_score": 0.9832956179293538,
+      "room_coverage": 1.0,
+      "adjacency_coverage": 1.0,
+      "relation_coverage": 1.0,
+      "grid_coverage": 1.0,
+      "size_compatibility": 0.8464817248906141,
+      "faiss_similarity": 0.9729489088058472,
+      "hard_constraints_satisfied": 1.0,
+      "retrieved_original": false,
+      "rank": 3
+    },
+    {
+      "id": "17725",
+      "compatibility_score": 0.9230931647929097,
+      "room_coverage": 1.0,
+      "adjacency_coverage": 1.0,
+      "relation_coverage": 0.8,
+      "grid_coverage": 0.8,
+      "size_compatibility": 0.8464817248906141,
+      "faiss_similarity": 0.9688998460769653,
+      "hard_constraints_satisfied": 1.0,
+      "retrieved_original": false,
+      "rank": 4
+    },
+    {
+      "id": "7112",
+      "compatibility_score": 0.910375100185034,
+      "room_coverage": 1.0,
+      "adjacency_coverage": 1.0,
+      "relation_coverage": 0.8,
+      "grid_coverage": 0.8,
+      "size_compatibility": 0.7165313105737893,
+      "faiss_similarity": 0.9744393825531006,
+      "hard_constraints_satisfied": 1.0,
+      "retrieved_original": false,
+      "rank": 5
+    },
+    {
+      "id": "3929",
+      "compatibility_score": 0.909953445006964,
+      "room_coverage": 1.0,
+      "adjacency_coverage": 1.0,
+      "relation_coverage": 0.6,
+      "grid_coverage": 1.0,
+      "size_compatibility": 0.7165313105737893,
+      "faiss_similarity": 0.9660062789916992,
+      "hard_constraints_satisfied": 1.0,
+      "retrieved_original": false,
+      "rank": 6
+    },
+    {
+      "id": "17851",
+      "compatibility_score": 0.8930923184069539,
+      "room_coverage": 1.0,
+      "adjacency_coverage": 1.0,
+      "relation_coverage": 0.6,
+      "grid_coverage": 0.8,
+      "size_compatibility": 0.8464817248906141,
+      "faiss_similarity": 0.9688829183578491,
+      "hard_constraints_satisfied": 1.0,
+      "retrieved_original": false,
+      "rank": 7
+    },
+    {
+      "id": "49682",
+      "compatibility_score": 0.8929536005171681,
+      "room_coverage": 1.0,
+      "adjacency_coverage": 1.0,
+      "relation_coverage": 0.8,
+      "grid_coverage": 0.6,
+      "size_compatibility": 0.8464817248906141,
+      "faiss_similarity": 0.9661085605621338,
+      "hard_constraints_satisfied": 1.0,
+      "retrieved_original": false,
+      "rank": 8
+    },
+    {
+      "id": "17142",
+      "compatibility_score": 0.8834457352074528,
+      "room_coverage": 1.0,
+      "adjacency_coverage": 0.8,
+      "relation_coverage": 0.8,
+      "grid_coverage": 0.8,
+      "size_compatibility": 0.8464817248906141,
+      "faiss_similarity": 0.9759512543678284,
+      "hard_constraints_satisfied": 1.0,
+      "retrieved_original": false,
+      "rank": 9
+    },
+    {
+      "id": "72530",
+      "compatibility_score": 0.879969323684332,
+      "room_coverage": 1.0,
+      "adjacency_coverage": 1.0,
+      "relation_coverage": 0.6,
+      "grid_coverage": 0.8,
+      "size_compatibility": 0.7165313105737893,
+      "faiss_similarity": 0.9663238525390625,
+      "hard_constraints_satisfied": 1.0,
+      "retrieved_original": false,
+      "rank": 10
+    }
+  ]
+}

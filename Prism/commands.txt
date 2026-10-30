@@ -1,0 +1,3 @@
+Venv Activation
+.\.venv\Scripts\activate
+

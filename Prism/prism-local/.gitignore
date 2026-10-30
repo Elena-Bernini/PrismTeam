@@ -1,0 +1,10 @@
+# Generated or large data
+data/
+outputs/
+logs/
+*.zip
+__pycache__/
+*.pyc
+.venv/
+.env
+.cache/
