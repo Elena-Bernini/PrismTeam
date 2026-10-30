@@ -1,0 +1,157 @@
+# =============================================================================
+# Prism - default configuration (shared by every phase)
+# -----------------------------------------------------------------------------
+# Values are merged in this order (later wins):
+#   1. configs/default.yaml               (this file)
+#   2. configs/env/<env>.yaml             (--env local|cluster, or PRISM_ENV)
+#   3. --config path/to/extra.yaml        (optional, repeatable)
+#   4. --set key.subkey=value             (command line, repeatable)
+# =============================================================================
+
+dataset: rplan            # rplan | resplan (resplan adapter is a stub for now)
+mode: preview             # preview | full   (every script also accepts --mode)
+
+paths:
+  # All relative paths are resolved against the project root.
+  data_root: data                 # raw/ and processed/ live here
+  artifacts_root: artifacts       # models, embeddings, indexes
+  outputs_root: outputs           # HTML reports, PNG previews, CSV metrics
+  hf_home: null                   # Hugging Face cache (null = library default)
+  torch_home: null                # torch.hub / torchvision cache (null = default)
+
+preview:
+  n: 200                  # number of layouts used in preview mode
+  seed: 42                # the preview subset is a fixed random sample
+
+runtime:
+  device: auto            # auto | cpu | cuda | mps   (auto: cuda > mps > cpu)
+  num_workers: auto       # auto: 0 on Windows/macOS, 4 on Linux
+  seed: 42
+  prefer_packed: false    # read packed .jsonl.gz/.npy files when they exist
+
+# -----------------------------------------------------------------------------
+# Raw dataset locations (relative to paths.data_root)
+# -----------------------------------------------------------------------------
+rplan:
+  pkl: raw/rplan/Interface/static/Data/data_train_converted.pkl
+  snapshot_dir: raw/rplan/Interface/static/Data/snapshot_train
+  img_dir: raw/rplan/Interface/static/Data/Img
+  canvas: 256             # Graph2Plan coordinates live in a 256x256 canvas
+
+resplan:
+  root: raw/resplan       # see src/prism/datasets/resplan.py
+
+# -----------------------------------------------------------------------------
+# Phase 03 - adjacency and spatial relations (see docs/relations.md)
+# -----------------------------------------------------------------------------
+geometry:
+  adjacency_source: geometric   # geometric | g2p | union
+  wall_dilation_px: 3           # each room mask is dilated by this many pixels
+  min_contact_px: 5             # minimum shared-wall length to call two rooms adjacent
+  containment_threshold: 0.9    # bbox overlap ratio for inside / surrounding
+  axis_overlap_threshold: 0.5   # projection overlap ratio for pure left/right/above/below
+  entrance_max_dist_px: 12      # max distance between front door and entrance room
+
+front_door:
+  add_virtual_node: true        # add a "FrontDoor" node linked to the entrance room
+  min_width_px: 2               # sanity check on the door segment length
+
+# -----------------------------------------------------------------------------
+# Phase 04 - rendering of semantic images from layout JSON
+# -----------------------------------------------------------------------------
+render:
+  size: 256
+  draw_room_outlines: true
+  outline_width: 2
+  boundary_width: 3
+  draw_front_door: true
+  front_door_width: 4
+  unknown_fill: "#bdbdbd"       # colour of masked (removed) rooms in partial queries
+
+# -----------------------------------------------------------------------------
+# Phase 05 - splits and packing
+# -----------------------------------------------------------------------------
+splits:
+  train: 0.8
+  val: 0.1
+  test: 0.1
+  seed: 42
+
+# -----------------------------------------------------------------------------
+# Phase 06/07 - graph pipeline
+# -----------------------------------------------------------------------------
+graph:
+  type_vocab: fine              # fine (dataset-specific ids) | unified (cross-dataset taxonomy)
+  include_door_node: true       # use the virtual FrontDoor node in the GNN input
+  model: sage                   # gcn | sage | gat
+  hidden_dim: 64
+  embed_dim: 128
+  num_layers: 3
+  heads: 4                      # only for gat
+  dropout: 0.1
+  use_edge_attr: true
+  objective: gae                # gae | contrastive | both
+  contrastive:
+    temperature: 0.2
+    node_drop: 0.2
+    edge_drop: 0.1
+    feature_noise: 0.02
+  epochs: 30
+  epochs_preview: 5
+  batch_size: 64
+  lr: 0.001
+  weight_decay: 0.0001
+  patience: 8                   # early stopping on validation loss
+  encoders: [descriptor, gnn]   # what phase 07 indexes
+
+# -----------------------------------------------------------------------------
+# Phase 08 - vision pipeline
+# -----------------------------------------------------------------------------
+vision:
+  encoders: [dinov2_base]       # colorhist | resnet18 | resnet50 | dinov2_small | dinov2_base |
+                                # dinov2_large | clip_b32 | timm:<name>
+  image_source: render          # render | snapshot | img
+  weights: pretrained           # pretrained | none
+  batch_size: 32
+  image_size: 224
+  pooling: cls                  # cls | mean  (ViT models)
+
+# -----------------------------------------------------------------------------
+# Phase 07-10 - retrieval
+# -----------------------------------------------------------------------------
+retrieval:
+  backend: auto                 # auto (faiss if installed) | faiss | numpy
+  metric: cosine                # cosine | l2
+  index: flat                   # flat | hnsw (faiss only)
+  top_k: 10
+  num_queries: 50
+  num_queries_preview: 12
+  query_split: test             # queries are drawn from this split
+  rrf_k: 60
+  hybrid: true                  # build RRF fusion of every (graph, vision) pair
+  grids: 6                      # number of qualitative PNG grids per pipeline
+
+partial:
+  strategy: random              # random | remove_type | remove_bedroom | remove_smallest |
+                                # remove_largest | keep_connected
+  remove_ratio: 0.3
+  remove_type: null
+  keep_count: 3                 # for keep_connected
+  protect_entrance: false       # never remove the room behind the front door
+  candidate_pool: 200
+  rerank: true
+  weights:                      # compatibility re-ranking weights
+    room: 0.30
+    adjacency: 0.20
+    relation: 0.10
+    grid: 0.10
+    size: 0.10
+    door: 0.10
+    vector: 0.10
+
+evaluation:
+  relevance_adjacency_tau: 0.6  # relevance = same unified room composition AND adjacency sim >= tau
+  ged:
+    enabled: false
+    max_pairs: 200
+    timeout_s: 2.0

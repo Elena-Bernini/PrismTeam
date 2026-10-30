@@ -1,0 +1,61 @@
+# =============================================================================
+# Room taxonomy
+# -----------------------------------------------------------------------------
+# "fine" types are the dataset-specific ids (RPLAN / Graph2Plan official ids).
+# "unified" types are the cross-dataset taxonomy used when RPLAN and ResPlan are
+# merged. ResPlan already normalises bedrooms into one category, so unified
+# types follow the ResPlan granularity.
+# =============================================================================
+
+unified_types:
+  # name: colour used by the renderer (one colour per unified type)
+  living:    "#e8e8e8"
+  bedroom:   "#f6d77a"
+  kitchen:   "#f19e9e"
+  bathroom:  "#8cc7ec"
+  dining:    "#f4c38b"
+  study:     "#c6a6e3"
+  balcony:   "#9bd17a"
+  entrance:  "#b9b9b9"
+  storage:   "#c9ad94"
+  stair:     "#8d8d8d"
+  other:     "#d9d9d9"
+
+rplan:
+  # id: [fine name, unified type, render colour]
+  # Fine colours keep bedroom sub-types visually distinct in previews.
+  0:  [LivingRoom, living,   "#e8e8e8"]
+  1:  [MasterRoom, bedroom,  "#f6d77a"]
+  2:  [Kitchen,    kitchen,  "#f19e9e"]
+  3:  [Bathroom,   bathroom, "#8cc7ec"]
+  4:  [DiningRoom, dining,   "#f4c38b"]
+  5:  [ChildRoom,  bedroom,  "#f9e3a3"]
+  6:  [StudyRoom,  study,    "#c6a6e3"]
+  7:  [SecondRoom, bedroom,  "#eec95f"]
+  8:  [GuestRoom,  bedroom,  "#e6bd4a"]
+  9:  [Balcony,    balcony,  "#9bd17a"]
+  10: [Entrance,   entrance, "#b9b9b9"]
+  11: [Storage,    storage,  "#c9ad94"]
+  12: [Wall-in,    storage,  "#b59a80"]
+
+# Graph2Plan also documents these ids; they should not appear as room boxes,
+# but are listed so that diagnostics can name them if they do.
+rplan_extra:
+  13: External
+  14: ExteriorWall
+  15: FrontDoor
+  16: InteriorWall
+  17: InteriorDoor
+
+# ResPlan category keys -> unified type (keys from the ResPlan paper, Sec. 4).
+resplan:
+  living: living
+  bedroom: bedroom
+  kitchen: kitchen
+  bathroom: bathroom
+  balcony: balcony
+  storage: storage
+  stair: stair
+  dining: dining
+  parking: other
+  pool: other

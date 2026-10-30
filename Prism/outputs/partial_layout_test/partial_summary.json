@@ -1,7 +1,0 @@
-{
-  "num_queries": 10,
-  "original_recall_at_k": 0.8,
-  "mean_topk_compatibility": 0.7958684781080573,
-  "mean_top1_compatibility": 0.9164773401734502,
-  "mean_hard_constraint_rate_topk": 0.86
-}

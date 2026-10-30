@@ -1,5 +1,0 @@
-args:
-  processed_root: data/processed/rplan
-  retrieval_root: outputs/retrieval_dinov2
-  outputs_root: outputs/evaluation_dinov2
-  top_k: 10

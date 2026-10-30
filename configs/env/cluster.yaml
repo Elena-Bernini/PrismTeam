@@ -1,0 +1,14 @@
+# AImageLab-HPC (UNIMORE). See cluster/README_cluster.md.
+# /work/<project> is shared BeeGFS storage (fast for large sequential reads),
+# python environments live in /homes/<user>/envs, caches go to /work.
+paths:
+  data_root: /work/cvcs2026/PrismTeam/data
+  artifacts_root: /work/cvcs2026/PrismTeam/artifacts
+  outputs_root: /work/cvcs2026/PrismTeam/outputs
+  hf_home: /work/cvcs2026/PrismTeam/cache/huggingface
+  torch_home: /work/cvcs2026/PrismTeam/cache/torch
+
+runtime:
+  device: auto
+  num_workers: 4
+  prefer_packed: true   # avoids reading ~80k small files from BeeGFS

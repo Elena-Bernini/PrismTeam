@@ -1,0 +1,13 @@
+# Local machines (Pier: Windows + NVIDIA, Elena: macOS + Apple M1).
+# Paths are relative to the project root, so the same file works on both.
+paths:
+  data_root: data
+  artifacts_root: artifacts
+  outputs_root: outputs
+  hf_home: null
+  torch_home: null
+
+runtime:
+  device: auto        # cuda on Pier's PC, mps on Elena's Mac, cpu otherwise
+  num_workers: auto
+  prefer_packed: false

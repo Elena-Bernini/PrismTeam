@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prism"
+version = "0.1.0"
+description = "CVCS Phase 1 (Maticad): vision vs graph representations for semantic floor-plan retrieval"
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.24", "pillow>=9.5", "matplotlib>=3.7", "pyyaml>=6.0", "tqdm>=4.65", "networkx>=3.0"]
+
+[project.optional-dependencies]
+faiss = ["faiss-cpu>=1.7.4"]
+vision = ["transformers>=4.40", "timm>=0.9"]
+dev = ["pytest>=7", "ruff>=0.4"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120

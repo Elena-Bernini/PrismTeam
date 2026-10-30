@@ -1,0 +1,3 @@
+# Deep vision encoders (phase 08 / 10). Requires PyTorch + torchvision already installed.
+transformers>=4.40
+timm>=0.9

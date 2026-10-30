@@ -1,3 +1,32 @@
-datasets/
-Prism/data/
-*.pdf
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Data and results (never commit them)
+data/raw/**
+!data/raw/rplan/.gitkeep
+!data/raw/resplan/.gitkeep
+data/processed/
+data_synthetic/
+artifacts/
+artifacts_synthetic/
+outputs/
+outputs_synthetic/
+logs/*
+!logs/.gitkeep
+*.pkl
+*.npy
+*.faiss
+*.pt
+*.zip
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

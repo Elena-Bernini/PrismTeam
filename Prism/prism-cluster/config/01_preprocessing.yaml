@@ -1,9 +1,0 @@
-args:
-  dataset_root: /work/cvcs2026/PrismTeam/data/raw/rplan/extracted
-  processed_root: /work/cvcs2026/PrismTeam/data/processed/rplan
-  audit_root: /work/cvcs2026/PrismTeam/outputs/dataset_audit
-  room_zones: config/room_zones.yaml
-  scale_meters_per_pixel: null
-  layout_preview_n: 50
-  graph_preview_n: 20
-  preview_seed: 42

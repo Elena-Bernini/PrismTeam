@@ -1,1 +1,0 @@
-"""Shared Prism helper package."""
