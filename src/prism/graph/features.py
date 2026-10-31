@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 
-from src.prism.datasets.schema import CONNECTION_TO_ID, CONNECTIONS, RELATION_TO_ID, RELATIONS, Taxonomy
+from prism.datasets.schema import CONNECTION_TO_ID, CONNECTIONS, RELATION_TO_ID, RELATIONS, Taxonomy
 
 NUM_GEOM_NODE_FEATS = 5
 NUM_DOOR_NODE_FEATS = 3

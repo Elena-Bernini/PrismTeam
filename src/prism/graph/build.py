@@ -35,10 +35,10 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import numpy as np
 
-from src.prism.datasets.schema import FRONT_DOOR_NODE_TYPE, RELATION_TO_ID
-from src.prism.geometry.adjacency import geometric_adjacency
-from src.prism.geometry.polygon import bbox_to_polygon
-from src.prism.geometry.relations import inverse_relation, relation_features, spatial_relation
+from prism.datasets.schema import FRONT_DOOR_NODE_TYPE, RELATION_TO_ID
+from prism.geometry.adjacency import geometric_adjacency
+from prism.geometry.polygon import bbox_to_polygon
+from prism.geometry.relations import inverse_relation, relation_features, spatial_relation
 
 
 def _room_polygon(room: Dict[str, Any]) -> List[List[float]]:

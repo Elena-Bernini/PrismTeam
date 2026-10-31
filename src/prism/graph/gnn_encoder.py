@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Sequence
 
 import numpy as np
 
-from src.prism.datasets.schema import Taxonomy
-from src.prism.graph.features import feature_dims, graph_to_arrays
+from prism.datasets.schema import Taxonomy
+from prism.graph.features import feature_dims, graph_to_arrays
 
 
 def checkpoint_path(gnn_dir: Path) -> Path:
@@ -32,7 +32,7 @@ class GnnEncoder:
         """Rebuild the encoder from ``ckpt`` and move it to ``device``."""
         import torch
 
-        from src.prism.graph.models import GraphEncoder
+        from prism.graph.models import GraphEncoder
 
         if not ckpt.exists():
             raise FileNotFoundError(f"GNN checkpoint not found: {ckpt}. Run phase 06 first.")
@@ -61,7 +61,7 @@ class GnnEncoder:
         """Embed a list of graph dictionaries -> ``(len(graphs), dim)`` float32 matrix."""
         import torch
 
-        from src.prism.graph.data import collate
+        from prism.graph.data import collate
 
         arrs = [self.arrays(g) for g in graphs]
         out: List[np.ndarray] = []

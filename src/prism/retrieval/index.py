@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from src.prism.common.io import read_json, write_json
+from prism.common.io import read_json, write_json
 
 
 def faiss_available() -> bool:

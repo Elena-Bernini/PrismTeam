@@ -13,9 +13,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from src.prism.datasets.schema import CONNECTIONS, RELATIONS, Taxonomy
-from src.prism.geometry.polygon import polygon_area
-from src.prism.graph.build import room_edges, room_nodes
+from prism.datasets.schema import CONNECTIONS, RELATIONS, Taxonomy
+from prism.geometry.polygon import polygon_area
+from prism.graph.build import room_edges, room_nodes
 
 FACINGS = ["north", "south", "east", "west", "unknown"]
 

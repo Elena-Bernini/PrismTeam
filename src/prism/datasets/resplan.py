@@ -29,9 +29,9 @@ from typing import Any, Dict, Iterator, List, Sequence
 
 import numpy as np
 
-from src.prism.datasets.schema import SCHEMA_VERSION, Taxonomy
-from src.prism.geometry.front_door import describe_front_door, segment_from_door_polygon
-from src.prism.geometry.polygon import polygon_area, polygon_bbox
+from prism.datasets.schema import SCHEMA_VERSION, Taxonomy
+from prism.geometry.front_door import describe_front_door, segment_from_door_polygon
+from prism.geometry.polygon import polygon_area, polygon_bbox
 
 CANVAS = 256
 

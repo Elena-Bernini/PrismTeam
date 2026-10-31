@@ -25,8 +25,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from src.prism.graph.data import Arrays, augment, collate, iterate_batches
-from src.prism.graph.models import GraphEncoder
+from prism.graph.data import Arrays, augment, collate, iterate_batches
+from prism.graph.models import GraphEncoder
 
 
 def link_prediction_loss(h: torch.Tensor, batch: Any, generator: Optional[torch.Generator] = None) -> torch.Tensor:

@@ -23,7 +23,7 @@ from typing import Dict, List, Sequence, Tuple
 
 import numpy as np
 
-from src.prism.geometry.polygon import dilate_square, rasterize_polygon
+from prism.geometry.polygon import dilate_square, rasterize_polygon
 
 
 def bbox_gap(a: Sequence[float], b: Sequence[float]) -> float:

@@ -21,7 +21,7 @@ from collections import Counter
 import numpy as np
 from PIL import Image
 
-import scripts._bootstrap as _bootstrap  # noqa: F401
+import _bootstrap  # noqa: F401
 
 from prism.common.cli import build_parser, setup
 from prism.common.io import to_jsonable, write_json

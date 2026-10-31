@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.patches import Polygon as MplPolygon  # noqa: E402
 
-from src.prism.datasets.schema import Taxonomy  # noqa: E402
-from src.prism.geometry.polygon import bbox_to_polygon  # noqa: E402
+from prism.datasets.schema import Taxonomy  # noqa: E402
+from prism.geometry.polygon import bbox_to_polygon  # noqa: E402
 
 DOOR_COLOR = "#ffd600"
 RELATION_SHORT = {

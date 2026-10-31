@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 
-from src.prism.geometry.polygon import point_in_polygon, segment_polygon_distance
+from prism.geometry.polygon import point_in_polygon, segment_polygon_distance
 
 
 def door_segment_from_g2p_boundary(boundary: Any) -> Optional[List[List[float]]]:
