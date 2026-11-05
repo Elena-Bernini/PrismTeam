@@ -22,9 +22,9 @@ from typing import Any, Dict, Tuple
 
 import numpy as np
 
-from src.prism.common.config import load_config, resolve_path
-from src.prism.common.device import configure_platform
-from src.prism.common.workspace import Workspace
+from prism.common.config import load_config, resolve_path
+from prism.common.device import configure_platform
+from prism.common.workspace import Workspace
 
 
 def build_parser(description: str) -> argparse.ArgumentParser:

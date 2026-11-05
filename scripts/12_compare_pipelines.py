@@ -12,7 +12,7 @@ compare a run with ResNet-50 against a run with DINOv2, or GAE vs contrastive.
 
 from pathlib import Path
 
-import scripts._bootstrap as _bootstrap  # noqa: F401
+import _bootstrap  # noqa: F401
 
 from prism.common.cli import build_parser, setup
 from prism.common.config import resolve_path

@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-from src.prism.common.io import to_jsonable
+from prism.common.io import to_jsonable
 
 _CSS = """
 :root { --fg:#1d1d1f; --muted:#6e6e73; --line:#e3e3e8; --bg:#ffffff; --accent:#2f6fde; --card:#f7f7f9; }

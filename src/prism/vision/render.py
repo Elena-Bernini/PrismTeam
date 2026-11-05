@@ -18,8 +18,8 @@ from typing import Any, Dict, Optional, Sequence
 
 from PIL import Image, ImageDraw
 
-from src.prism.datasets.schema import Taxonomy
-from src.prism.geometry.polygon import bbox_to_polygon
+from prism.datasets.schema import Taxonomy
+from prism.geometry.polygon import bbox_to_polygon
 
 FRONT_DOOR_COLOR = (255, 214, 0)
 WALL_COLOR = (40, 40, 40)

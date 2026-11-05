@@ -22,8 +22,8 @@ from typing import Any, Dict, Iterable, Optional, Set, Tuple
 
 import numpy as np
 
-from src.prism.datasets.schema import Taxonomy
-from src.prism.graph.build import room_edges, room_nodes
+from prism.datasets.schema import Taxonomy
+from prism.graph.build import room_edges, room_nodes
 
 
 @dataclass

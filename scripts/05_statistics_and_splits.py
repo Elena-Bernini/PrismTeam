@@ -19,7 +19,7 @@ from collections import Counter
 
 import numpy as np
 
-import scripts._bootstrap as _bootstrap  # noqa: F401
+import _bootstrap  # noqa: F401
 
 from prism.common.cli import build_parser, setup
 from prism.common.io import ensure_dir, progress, write_json, write_jsonl_gz

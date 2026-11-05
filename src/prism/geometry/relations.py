@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from typing import Dict, Sequence
 
-from src.prism.datasets.schema import INVERSE_RELATION
+from prism.datasets.schema import INVERSE_RELATION
 
 
 def interval_overlap(a0: float, a1: float, b0: float, b1: float) -> float:

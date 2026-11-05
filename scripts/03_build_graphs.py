@@ -20,7 +20,7 @@ from collections import Counter, defaultdict
 
 import numpy as np
 
-import scripts._bootstrap as _bootstrap  # noqa: F401
+import _bootstrap  # noqa: F401
 
 from prism.common.cli import Timer, build_parser, setup
 from prism.common.io import clean_dir, progress, read_json, write_json

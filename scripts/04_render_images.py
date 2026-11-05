@@ -9,7 +9,7 @@ is reused in phase 10 to draw partial queries (masked rooms in grey).
     python scripts/04_render_images.py --mode full --set render.size=224
 """
 
-import scripts._bootstrap as _bootstrap  # noqa: F401
+import _bootstrap  # noqa: F401
 
 from prism.common.cli import Timer, build_parser, setup
 from prism.common.io import clean_dir, progress

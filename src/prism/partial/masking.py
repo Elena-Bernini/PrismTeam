@@ -21,8 +21,8 @@ import random
 from collections import deque
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from src.prism.datasets.schema import Taxonomy
-from src.prism.graph.build import room_edges
+from prism.datasets.schema import Taxonomy
+from prism.graph.build import room_edges
 
 
 def choose_visible_rooms(layout: Dict[str, Any], graph: Dict[str, Any], pcfg: Dict[str, Any],

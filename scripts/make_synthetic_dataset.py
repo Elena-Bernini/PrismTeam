@@ -11,7 +11,7 @@ confused with (or overwrite) the real dataset:
 
 import argparse
 
-import scripts._bootstrap as _bootstrap  # noqa: F401
+import _bootstrap  # noqa: F401
 
 from prism.common.config import resolve_path
 from prism.datasets.synthetic import write_synthetic_rplan

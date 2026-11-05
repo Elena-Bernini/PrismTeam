@@ -10,7 +10,7 @@ cluster). It reports which phases can run and writes a small report.
 import importlib
 import platform
 
-import scripts._bootstrap as _bootstrap  # noqa: F401
+import _bootstrap  # noqa: F401
 
 from prism.common.cli import build_parser, setup
 from prism.common.device import describe_device, resolve_device

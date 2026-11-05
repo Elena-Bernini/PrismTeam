@@ -24,9 +24,9 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from src.prism.datasets.schema import SCHEMA_VERSION, Taxonomy
-from src.prism.geometry.front_door import describe_front_door, door_segment_from_g2p_boundary
-from src.prism.geometry.polygon import (as_points, bbox_iou, bbox_to_polygon, polygon_area,
+from prism.datasets.schema import SCHEMA_VERSION, Taxonomy
+from prism.geometry.front_door import describe_front_door, door_segment_from_g2p_boundary
+from prism.geometry.polygon import (as_points, bbox_iou, bbox_to_polygon, polygon_area,
                                     polygon_bbox)
 
 

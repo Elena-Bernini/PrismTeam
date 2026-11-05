@@ -11,10 +11,10 @@ from typing import Any, Dict, Optional, Sequence
 
 import numpy as np
 
-from src.prism.common.workspace import Workspace
-from src.prism.datasets.schema import Taxonomy
-from src.prism.graph.descriptor import graph_descriptor
-from src.prism.vision.render import render_layout
+from prism.common.workspace import Workspace
+from prism.datasets.schema import Taxonomy
+from prism.graph.descriptor import graph_descriptor
+from prism.vision.render import render_layout
 
 
 class DescriptorQueryEncoder:
@@ -35,7 +35,7 @@ class GnnQueryEncoder:
 
     def __init__(self, ws: Workspace, taxonomy: Taxonomy, device: str) -> None:
         """Load the checkpoint of this workspace."""
-        from src.prism.graph.gnn_encoder import GnnEncoder, checkpoint_path
+        from prism.graph.gnn_encoder import GnnEncoder, checkpoint_path
 
         self.encoder = GnnEncoder(checkpoint_path(ws.gnn_dir), taxonomy, device)
 
@@ -50,7 +50,7 @@ class VisionQueryEncoder:
     def __init__(self, encoder_name: str, cfg: Dict[str, Any], taxonomy: Taxonomy, device: str,
                  image_source: str) -> None:
         """Build the vision encoder; warn if the index was not built on renders."""
-        from src.prism.vision.encoders import build_encoder
+        from prism.vision.encoders import build_encoder
 
         self.encoder = build_encoder(encoder_name, cfg["vision"], device)
         self.taxonomy = taxonomy

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence
 
-from src.prism.common.viz import image_grid
+from prism.common.viz import image_grid
 
 
 def retrieval_figure(store: Any, query_id: str, results: Sequence[Dict[str, Any]], title: str,

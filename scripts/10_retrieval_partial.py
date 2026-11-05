@@ -22,7 +22,7 @@ import random
 
 import numpy as np
 
-import scripts._bootstrap as _bootstrap  # noqa: F401
+import _bootstrap  # noqa: F401
 
 from prism.common.cli import build_parser, setup
 from prism.common.device import resolve_device, torch_available

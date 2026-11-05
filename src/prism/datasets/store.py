@@ -15,8 +15,8 @@ from typing import Any, Dict, Iterator, List, Optional
 
 from PIL import Image
 
-from src.prism.common.io import read_json, read_jsonl_gz
-from src.prism.common.workspace import Workspace
+from prism.common.io import read_json, read_jsonl_gz
+from prism.common.workspace import Workspace
 
 
 class LayoutStore:

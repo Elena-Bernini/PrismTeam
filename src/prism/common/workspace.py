@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
 
-from src.prism.common.config import resolve_path
+from prism.common.config import resolve_path
 
 
 @dataclass

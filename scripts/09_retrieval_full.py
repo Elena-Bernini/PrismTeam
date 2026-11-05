@@ -15,7 +15,7 @@ and evaluated in phase 11.
 
 import random
 
-import scripts._bootstrap as _bootstrap  # noqa: F401
+import _bootstrap  # noqa: F401
 
 from prism.common.cli import build_parser, setup
 from prism.common.io import clean_dir, progress, write_jsonl

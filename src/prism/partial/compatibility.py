@@ -22,7 +22,7 @@ import math
 from collections import Counter
 from typing import Any, Dict
 
-from src.prism.evaluation.metrics import LayoutSummary
+from prism.evaluation.metrics import LayoutSummary
 
 
 def counter_coverage(query: Counter, candidate: Counter) -> float:
