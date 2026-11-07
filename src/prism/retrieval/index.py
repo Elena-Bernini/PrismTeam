@@ -153,8 +153,7 @@ class VectorIndex:
         if self.scaler:
             write_json(folder / "scaler.json", self.scaler, indent=None)
         if self._faiss is not None:
-            import faiss
-            faiss.write_index(self._faiss, str(folder / "index.faiss"))
+            write_faiss_index(self._faiss, folder / "index.faiss")
 
     @classmethod
     def load(cls, folder: Path, backend: str = "auto") -> "VectorIndex":
@@ -179,10 +178,37 @@ class VectorIndex:
         obj.backend = backend
         obj._faiss = None
         if backend == "faiss":
-            import faiss
             fpath = folder / "index.faiss"
-            obj._faiss = faiss.read_index(str(fpath)) if fpath.exists() else obj._build_faiss()
+            obj._faiss = None
+            if fpath.exists():
+                try:
+                    obj._faiss = read_faiss_index(fpath)
+                except Exception as exc:  # corrupt / incompatible file: rebuild from vectors.npy
+                    print(f"  [warn] could not read {fpath} ({exc}); rebuilding the FAISS index from vectors.npy")
+            if obj._faiss is None or obj._faiss.ntotal != len(obj.ids):
+                obj._faiss = obj._build_faiss()
         return obj
+
+
+def write_faiss_index(index: Any, path: Path) -> None:
+    """Save a FAISS index through Python file I/O.
+
+    ``faiss.write_index(index, str(path))`` opens the file from C++ with a narrow
+    ``char*`` path, which fails on Windows when the path contains non-ASCII
+    characters (e.g. ``1° Anno``). Serialising to a byte array and writing it with
+    Python avoids the problem on every platform.
+    """
+    import faiss
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(faiss.serialize_index(index).tobytes())
+
+
+def read_faiss_index(path: Path) -> Any:
+    """Load a FAISS index saved by :func:`write_faiss_index` (or by ``faiss.write_index``)."""
+    import faiss
+
+    return faiss.deserialize_index(np.frombuffer(path.read_bytes(), dtype=np.uint8).copy())
 
 
 def list_indexes(indexes_root: Path) -> List[str]:
