@@ -1,11 +1,13 @@
-"""ResPlan adapter (EXPERIMENTAL - written from the paper, not yet run on the real files).
+"""ResPlan adapter (checked against the 2026-07-28 release of ``ResPlan.pkl``).
 
-ResPlan (Sec. 4 of the paper) stores each plan as a dictionary whose keys are
-semantic categories (``bedroom``, ``living``, ``kitchen``, ``bathroom``,
-``balcony``, ``storage``, ``wall``, ``door``, ``window``, ``front_door``,
-``inner``, ``land`` ...) and whose values are shapely (Multi)Polygons in
-metres, plus metadata (``wall_depth``, ``unitType``, ``area``, ``id``) and a
-networkx room graph whose edges are typed ``door`` / ``arch`` / ``wall``.
+``ResPlan.pkl`` is a list of 17,000 dictionaries whose keys are semantic
+categories (``bedroom``, ``living``, ``kitchen``, ``bathroom``, ``balcony``,
+``storage``, ``wall``, ``door``, ``window``, ``front_door``, ``inner``,
+``land`` ...) and whose values are shapely (Multi)Polygons, plus metadata
+(``wall_depth``, ``area``, ``net_area``, ``id``) and a networkx room graph.
+Graph nodes are named ``<category>_<k>`` (the k-th polygon of that category,
+plus ``front_door_0``); edges are typed ``via_door`` / ``adjacency`` /
+``direct`` / ``via_window`` and mapped onto the schema connections below.
 
 This adapter maps a record onto the SAME layout schema used for RPLAN:
 
@@ -16,9 +18,8 @@ This adapter maps a record onto the SAME layout schema used for RPLAN:
 - ``front_door`` becomes the front-door segment (long axis of the polygon);
 - the native graph edges are kept in ``source_edges`` with their connection type.
 
-When the real files arrive: put them in ``data/raw/resplan/``, adapt
-``load_resplan_records`` to the actual file format, and run phase 01/02 with
-``--dataset resplan``. Everything downstream works unchanged.
+Put the release files in ``data/raw/resplan/`` (needs ``shapely`` to unpickle)
+and run the phases with ``--dataset resplan``.
 """
 
 from __future__ import annotations
@@ -34,6 +35,12 @@ from prism.geometry.front_door import describe_front_door, segment_from_door_pol
 from prism.geometry.polygon import polygon_area, polygon_bbox
 
 CANVAS = 256
+
+# ResPlan edge types -> schema CONNECTIONS. "direct" only ever links the
+# front_door node to a room; "via_window" rooms share a wall with a window in it.
+RESPLAN_CONNECTIONS: Dict[str, str] = {
+    "via_door": "door", "direct": "entrance", "adjacency": "wall", "via_window": "wall",
+}
 
 
 def geometry_to_polygons(geom: Any) -> List[List[List[float]]]:
@@ -71,8 +78,11 @@ def convert_record(rec: Dict[str, Any], taxonomy: Taxonomy, cfg: Dict[str, Any])
     """Convert one ResPlan record into the unified layout dictionary."""
     room_keys = [taxonomy.fine[i]["name"] for i in taxonomy.fine_ids]
     raw_rooms = []
+    node_to_room: Dict[str, int] = {}
     for key in room_keys:
-        for poly in geometry_to_polygons(rec.get(key)):
+        for k, poly in enumerate(geometry_to_polygons(rec.get(key))):
+            # graph nodes are named "<category>_<k>" after the k-th polygon of that category
+            node_to_room[f"{key}_{k}"] = len(raw_rooms)
             raw_rooms.append((key, poly))
     inner = geometry_to_polygons(rec.get("inner"))
     all_pts = np.asarray([p for _, poly in raw_rooms for p in poly] + [p for poly in inner for p in poly], dtype=np.float64)
@@ -120,8 +130,11 @@ def convert_record(rec: Dict[str, Any], taxonomy: Taxonomy, cfg: Dict[str, Any])
     graph = rec.get("graph")
     if graph is not None and hasattr(graph, "edges"):
         for u, v, data in graph.edges(data=True):
-            source_edges.append({"source": int(u), "target": int(v), "raw_value": -1,
-                                 "connection": str(data.get("type", data.get("connection", "unknown")))})
+            # the "front_door_0" node is not a room: -1 makes downstream code skip the edge
+            raw_conn = str(data.get("type", data.get("connection", "unknown")))
+            source_edges.append({"source": node_to_room.get(str(u), -1), "target": node_to_room.get(str(v), -1),
+                                 "raw_value": -1, "connection": RESPLAN_CONNECTIONS.get(raw_conn, "unknown"),
+                                 "raw_connection": raw_conn})
     return {
         "schema_version": SCHEMA_VERSION, "id": str(rec.get("id", rec.get("planID", "unknown"))), "dataset": "resplan",
         "coordinate_system": {"width": CANVAS, "height": CANVAS, "origin": "top_left", "x_axis": "right",

@@ -7,3 +7,4 @@ pyyaml>=6.0
 tqdm>=4.65
 networkx>=3.0
 faiss-cpu>=1.7.4
+shapely>=2.0          # only to unpickle ResPlan.pkl (--dataset resplan)
