@@ -16,7 +16,12 @@ import random
 
 import numpy as np
 
-import _bootstrap  # noqa: F401
+import sys
+from pathlib import Path
+
+# Make `import prism` work however the script is launched (python scripts/x.py,
+# VS Code "Run Python File", python -m scripts.x) even without `pip install -e .`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from prism.common.cli import Timer, build_parser, setup
 from prism.common.device import resolve_device, torch_available
@@ -25,6 +30,7 @@ from prism.common.report import HtmlReport, finalize_report
 from prism.datasets.schema import Taxonomy
 from prism.datasets.store import LayoutStore, load_splits
 from prism.graph.descriptor import graph_descriptor
+from prism.graph.features import use_connection_features
 from prism.retrieval.index import VectorIndex, fit_scaler
 from prism.retrieval.visual import retrieval_figure
 
@@ -44,6 +50,7 @@ def main():
     ids = store.graph_ids()
     rcfg = cfg["retrieval"]
     encoders = args.encoders or list(cfg["graph"]["encoders"])
+    use_conn = use_connection_features(cfg)
 
     rep = HtmlReport("07 - Graph pipeline: embeddings and index", f"{ws.dataset} · {ws.mode}")
     built = {}
@@ -52,13 +59,14 @@ def main():
             with Timer("descriptor"):
                 vecs, names = [], None
                 for sid in progress(ids, "descriptor"):
-                    v, names = graph_descriptor(store.graph(sid), store.layout(sid), taxonomy)
+                    v, names = graph_descriptor(store.graph(sid), store.layout(sid), taxonomy, use_conn)
                     vecs.append(v)
                 X = np.stack(vecs)
                 train_rows = [i for i, s in enumerate(ids) if s in set(splits["train"])] or list(range(len(ids)))
                 scaler = fit_scaler(X[train_rows])
                 index = VectorIndex(ids, X, rcfg["metric"], rcfg["backend"], rcfg["index"], scaler,
-                                    meta={"pipeline": "graph", "encoder": "descriptor", "feature_names": names})
+                                    meta={"pipeline": "graph", "encoder": "descriptor", "feature_names": names,
+                                          "use_connections": use_conn, "taxonomy_level": taxonomy.level})
         elif enc == "gnn":
             if not torch_available():
                 print("  [skip] gnn: PyTorch not installed")

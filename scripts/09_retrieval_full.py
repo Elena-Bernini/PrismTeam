@@ -15,7 +15,12 @@ and evaluated in phase 11.
 
 import random
 
-import _bootstrap  # noqa: F401
+import sys
+from pathlib import Path
+
+# Make `import prism` work however the script is launched (python scripts/x.py,
+# VS Code "Run Python File", python -m scripts.x) even without `pip install -e .`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from prism.common.cli import build_parser, setup
 from prism.common.io import clean_dir, progress, write_jsonl

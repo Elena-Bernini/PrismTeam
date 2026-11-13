@@ -93,7 +93,37 @@ How it is represented everywhere:
 
 ## Connection types (RPLAN + ResPlan)
 
-`edge.connection` ∈ {`wall`, `door`, `arch`, `entrance`, `unknown`}. RPLAN only
-gives `wall` (adjacent across a wall, door unknown). ResPlan's graph
-distinguishes `door`, `arch` and `wall`, and these are copied when the ResPlan
-adapter is used. This way the two datasets share one edge schema.
+`edge.connection` ∈ {`wall`, `door`, `arch`, `window`, `entrance`, `unknown`}.
+
+- **RPLAN** has no wall or door geometry in the Graph2Plan pickle, so every
+  room-room edge is `wall` (adjacent across a wall, door unknown).
+- **ResPlan** keeps its walls, doors and windows. For each adjacent pair, phase
+  03 looks at the strip between the two rooms (where the shared wall should be):
+  - a door polygon covering at least `resplan.door_min_px` of the shared wall
+    (door pixels in the strip / wall thickness) → `door`;
+  - a stretch of at least `resplan.open_passage_min_px` without wall, or rooms
+    touching directly where no wall is drawn → `arch` (open passage);
+  - a window polygon there (e.g. room → balcony) → `window`;
+  - otherwise → `wall`.
+  If the plan comes with ResPlan's own graph (Kaggle release), the phase-03
+  report compares these labels with ResPlan's edge types (`via_door`,
+  `adjacency`, `via_window`, `via_opening`).
+- `entrance` = the edge between the FrontDoor node and the entrance room.
+
+Because RPLAN can only ever say `wall`, connection types are **switched off as
+features** (GNN and descriptor) when both datasets are used together
+(`graph.connection_features: auto`). Otherwise a model could tell the two
+datasets apart from that feature alone, instead of comparing layouts. They stay
+in the graph JSON and are used normally for ResPlan-only runs.
+
+## Adjacency radius for ResPlan
+
+ResPlan layouts are converted into an RPLAN-style partition (rooms meet on the
+wall centre lines, see `docs/datasets.md`), so adjacency uses the same rule and
+radius as RPLAN (`geometry.wall_dilation_px`).
+
+Connection types instead need the real walls: they are computed on the original
+room polygons (`source_polygons`) with a radius of `ceil(thickness / 2) + 1`,
+where the thickness is the plan's `wall_depth` rescaled into the canvas
+(`geometry_hints.wall_thickness_px`). With `resplan.room_partition: false` the
+original polygons are used for both, with that per-plan radius.

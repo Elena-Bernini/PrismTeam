@@ -37,6 +37,10 @@ mkdir -p logs
 Put the RPLAN files under
 `/work/cvcs2026/PrismTeam/data/raw/rplan/Interface/static/Data/`
 (`data_train_converted.pkl`, `snapshot_train/`).
+and ResPlan under `/work/cvcs2026/PrismTeam/data/raw/resplan/` (`ResPlan.pkl`, `split.json`).
+
+Jobs use both datasets by default (`DATASET=combined`). Use
+`--export=ALL,DATASET=rplan` (or `resplan`) to run on one dataset only.
 
 ## Jobs
 
@@ -47,7 +51,7 @@ cd /work/cvcs2026/PrismTeam/prism
 
 # 1) Look at everything on a small subset first (debug QoS, 1 h, 1 GPU)
 sbatch cluster/slurm/preview_all.sbatch
-#    -> open outputs/rplan/preview/*/report.html (scp them to your laptop)
+#    -> open outputs/{rplan,resplan,combined}/preview/*/report.html (scp them to your laptop)
 
 # 2) Full run, one stage at a time (each depends on the previous one)
 j1=$(sbatch --parsable cluster/slurm/01_05_preprocess.sbatch)

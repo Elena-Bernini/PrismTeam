@@ -9,7 +9,12 @@ is reused in phase 10 to draw partial queries (masked rooms in grey).
     python scripts/04_render_images.py --mode full --set render.size=224
 """
 
-import _bootstrap  # noqa: F401
+import sys
+from pathlib import Path
+
+# Make `import prism` work however the script is launched (python scripts/x.py,
+# VS Code "Run Python File", python -m scripts.x) even without `pip install -e .`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from prism.common.cli import Timer, build_parser, setup
 from prism.common.io import clean_dir, progress
@@ -26,6 +31,14 @@ def main():
     """Render every layout to PNG and show a grid of renders next to the snapshots."""
     args = build_parser(__doc__).parse_args()
     cfg, ws = setup(args, PHASE)
+    for member in ws.members():          # --dataset combined: run once per member dataset
+        if ws.is_combined:
+            print(f"--- {PHASE} on {member.dataset} ---")
+        run(member.cfg, member)
+
+
+def run(cfg, ws):
+    """Run the phase on one dataset (called once per member dataset for --dataset combined)."""
     out = ws.phase_dir(PHASE)
     taxonomy = Taxonomy(cfg, ws.dataset)
     store = LayoutStore(ws, prefer_packed=False)
@@ -41,16 +54,23 @@ def main():
     snap_dir = ws.raw_path("rplan.snapshot_dir") if ws.dataset == "rplan" else None
     from PIL import Image
     for sid in ids[:12]:
-        sp = snap_dir / f"{sid}.png" if snap_dir else None
-        images.append(Image.open(sp).convert("RGB") if sp is not None and sp.exists() else None)
-        titles.append(f"{sid} snapshot")
+        if snap_dir is not None:
+            sp = snap_dir / f"{store.layout(sid)['source_id']}.png"
+            images.append(Image.open(sp).convert("RGB") if sp.exists() else None)
+            titles.append(f"{sid} snapshot")
         images.append(Image.open(ws.images_dir / f"{sid}.png"))
         titles.append(f"{sid} render")
-    rep.figure(image_grid(images, titles, ncols=6, cell=2.2), "Original snapshot vs our render (pairs)")
+    rep.figure(image_grid(images, titles, ncols=6, cell=2.2),
+               "Original snapshot vs our render (pairs)" if snap_dir is not None else "Our renders")
 
     # Legend of colours.
-    legend = [{"id": t, "fine type": taxonomy.name(t), "unified": taxonomy.unified(t), "colour": taxonomy.color(t)}
-              for t in taxonomy.fine_ids]
+    palette = cfg["render"].get("palette", "unified")
+    seen = {}
+    for sid in ids:
+        for r in store.layout(sid)["rooms"]:
+            seen.setdefault(r["room_type_name"], r)
+    legend = [{"fine type": k, "unified": r["unified_type"], "colour": taxonomy.color(r, palette)}
+              for k, r in sorted(seen.items())]
     rep.heading("Colour legend")
     rep.table(legend)
     rep.heading("Partial-query style")

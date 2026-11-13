@@ -16,7 +16,11 @@ import sys
 
 import numpy as np
 
-import _bootstrap  # noqa: F401
+from pathlib import Path
+
+# Make `import prism` work however the script is launched (python scripts/x.py,
+# VS Code "Run Python File", python -m scripts.x) even without `pip install -e .`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from prism.common.cli import Timer, build_parser, setup
 from prism.common.device import describe_device, resolve_device, torch_available
@@ -25,7 +29,7 @@ from prism.common.report import HtmlReport, finalize_report
 from prism.common.viz import plt
 from prism.datasets.schema import Taxonomy
 from prism.datasets.store import LayoutStore, load_splits
-from prism.graph.features import feature_dims, graph_to_arrays, node_type_vocab
+from prism.graph.features import feature_dims, graph_to_arrays, node_type_vocab, use_connection_features
 
 PHASE = "06_train_gnn"
 
@@ -54,17 +58,19 @@ def main():
     taxonomy = Taxonomy(cfg, ws.dataset)
     store = LayoutStore(ws)
     splits = load_splits(ws)
-    kind, include_door = gcfg["type_vocab"], bool(gcfg["include_door_node"])
+    include_door = bool(gcfg["include_door_node"])
+    use_conn = use_connection_features(cfg)
 
     def arrays(ids):
         """Feature arrays of a list of graph ids."""
-        return [graph_to_arrays(store.graph(s), taxonomy, kind, include_door) for s in progress(ids, "featurise")]
+        return [graph_to_arrays(store.graph(s), taxonomy, include_door, use_conn) for s in progress(ids, "featurise")]
 
     train_g, val_g = arrays(splits["train"]), arrays(splits["val"])
     if not train_g:
         raise RuntimeError("Empty train split.")
-    node_dim, edge_dim = feature_dims(taxonomy, kind)
-    vocab_len = len(node_type_vocab(taxonomy, kind))
+    node_dim, edge_dim = feature_dims(taxonomy)
+    vocab = node_type_vocab(taxonomy)
+    vocab_len = len(vocab)
     geom_slice = slice(vocab_len, vocab_len + 5)
 
     device = resolve_device(cfg["runtime"]["device"])
@@ -75,7 +81,8 @@ def main():
     with Timer("training") as t:
         model, history = train_gnn(model, train_g, val_g, cfg, device, epochs, geom_slice)
 
-    model_config = {"node_dim": node_dim, "edge_dim": edge_dim, "type_vocab": kind, "include_door": include_door,
+    model_config = {"node_dim": node_dim, "edge_dim": edge_dim, "taxonomy_level": taxonomy.level, "vocab": vocab,
+                    "include_door": include_door, "use_connections": use_conn,
                     "model": gcfg["model"], "hidden_dim": int(gcfg["hidden_dim"]), "embed_dim": int(gcfg["embed_dim"]),
                     "num_layers": int(gcfg["num_layers"]), "heads": int(gcfg["heads"]),
                     "dropout": float(gcfg["dropout"]), "use_edge_attr": bool(gcfg["use_edge_attr"]),

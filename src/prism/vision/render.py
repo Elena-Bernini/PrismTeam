@@ -19,7 +19,7 @@ from typing import Any, Dict, Optional, Sequence
 from PIL import Image, ImageDraw
 
 from prism.datasets.schema import Taxonomy
-from prism.geometry.polygon import bbox_to_polygon
+from prism.geometry.polygon import room_shapes
 
 FRONT_DOOR_COLOR = (255, 214, 0)
 WALL_COLOR = (40, 40, 40)
@@ -53,24 +53,27 @@ def render_layout(layout: Dict[str, Any], taxonomy: Taxonomy, rcfg: Dict[str, An
     unknown = hex_to_rgb(rcfg.get("unknown_fill", "#bdbdbd"))
     if len(boundary) >= 3:
         draw.polygon(sc(boundary), fill=unknown)
+    for hole in layout.get("boundary_holes") or []:     # light wells / courtyards (ResPlan) are outside
+        if len(hole) >= 3:
+            draw.polygon(sc(hole), fill=BACKGROUND)
 
     visible = None if visible_room_ids is None else {int(i) for i in visible_room_ids}
     outline_w = max(1, int(round(rcfg.get("outline_width", 2) * scale)))
     for room in layout["rooms"]:
         if visible is not None and int(room["id"]) not in visible:
             continue
-        poly = room.get("polygon") or bbox_to_polygon(room["bbox"])
-        if len(poly) < 3:
-            continue
-        fill = hex_to_rgb(taxonomy.color(int(room["room_type_id"])))
-        draw.polygon(sc(poly), fill=fill)
-        if rcfg.get("draw_room_outlines", True):
+        fill = hex_to_rgb(taxonomy.color(room, rcfg.get("palette", "unified")))
+        for poly in room_shapes(room):          # ResPlan living rooms can have several parts
             pts = sc(poly)
-            draw.line(pts + [pts[0]], fill=WALL_COLOR, width=outline_w)
+            draw.polygon(pts, fill=fill)
+            if rcfg.get("draw_room_outlines", True):
+                draw.line(pts + [pts[0]], fill=WALL_COLOR, width=outline_w)
 
-    if len(boundary) >= 3:
-        pts = sc(boundary)
-        draw.line(pts + [pts[0]], fill=WALL_COLOR, width=max(1, int(round(rcfg.get("boundary_width", 3) * scale))))
+    boundary_w = max(1, int(round(rcfg.get("boundary_width", 3) * scale)))
+    for ring in [boundary] + list(layout.get("boundary_holes") or []):
+        if len(ring) >= 3:
+            pts = sc(ring)
+            draw.line(pts + [pts[0]], fill=WALL_COLOR, width=boundary_w)
 
     door = layout.get("front_door")
     if door and rcfg.get("draw_front_door", True):

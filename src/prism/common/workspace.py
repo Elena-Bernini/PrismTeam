@@ -6,13 +6,19 @@ overwrites a full run::
     data/processed/<dataset>/<mode>/layouts_json/ ...
     artifacts/<dataset>/<mode>/indexes/ ...
     outputs/<dataset>/<mode>/<NN_phase>/report.html
+
+``<dataset>`` is ``rplan``, ``resplan`` or ``combined``. The combined workspace
+has no layouts of its own: it reads the processed data of its member datasets
+(``combined.datasets``) and stores only its merged splits, metadata, packed
+files, models, indexes and reports.
 """
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from prism.common.config import resolve_path
 
@@ -27,6 +33,33 @@ class Workspace:
     def dataset(self) -> str:
         """Dataset name, e.g. ``rplan``."""
         return str(self.cfg["dataset"])
+
+    @property
+    def is_combined(self) -> bool:
+        """True for the ``combined`` workspace (several datasets in one gallery)."""
+        return self.dataset == "combined"
+
+    @property
+    def member_datasets(self) -> List[str]:
+        """Datasets whose processed data this workspace reads."""
+        if self.is_combined:
+            return [str(d) for d in self.cfg["combined"]["datasets"]]
+        return [self.dataset]
+
+    def member(self, dataset: str) -> "Workspace":
+        """Workspace of one member dataset (same mode, no processed override)."""
+        if not self.is_combined:
+            if dataset != self.dataset:
+                raise ValueError(f"'{dataset}' is not part of workspace '{self.dataset}'")
+            return self
+        cfg = copy.copy(self.cfg)
+        cfg["dataset"] = dataset
+        cfg["paths"] = {k: v for k, v in self.cfg["paths"].items() if k != "processed_override"}
+        return Workspace(cfg)
+
+    def members(self) -> List["Workspace"]:
+        """One workspace per member dataset (just ``[self]`` for a single dataset)."""
+        return [self.member(d) for d in self.member_datasets] if self.is_combined else [self]
 
     @property
     def mode(self) -> str:
@@ -116,6 +149,6 @@ class Workspace:
         return path
 
     def raw_path(self, key: str) -> Path:
-        """Resolve a dataset-relative path from the config (e.g. ``rplan.pkl``)."""
+        """Resolve a data-root-relative path from the config (e.g. ``rplan.pkl``, ``resplan.split_json``)."""
         section, name = key.split(".", 1)
         return self.data_root / str(self.cfg[section][name])

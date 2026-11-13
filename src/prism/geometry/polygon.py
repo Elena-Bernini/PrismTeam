@@ -5,7 +5,7 @@ Coordinates are image coordinates: origin top-left, x to the right, y downward.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -140,6 +140,36 @@ def rasterize_polygon(points: Sequence[Sequence[float]], size: int) -> np.ndarra
         ImageDraw.Draw(mask).polygon([(float(x), float(y)) for x, y in points], fill=1, outline=1)
     return np.asarray(mask, dtype=bool)
 
+
+
+def rasterize_shapes(shapes: Sequence[Any], size: int) -> np.ndarray:
+    """Rasterise several polygons (union) into one boolean mask.
+
+    Each shape is either a point list ``[[x, y], ...]`` or a dictionary
+    ``{"exterior": [[x, y], ...], "holes": [[[x, y], ...], ...]}``; holes are
+    cleared after the exterior is filled (needed for ResPlan wall networks,
+    which are one big polygon with a hole per room).
+    """
+    mask = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(mask)
+    for shape in shapes or []:
+        if isinstance(shape, dict):
+            exterior, holes = shape.get("exterior") or [], shape.get("holes") or []
+        else:
+            exterior, holes = shape, []
+        if len(exterior) >= 3:
+            draw.polygon([(float(x), float(y)) for x, y in exterior], fill=1, outline=1)
+        for hole in holes:
+            if len(hole) >= 3:
+                draw.polygon([(float(x), float(y)) for x, y in hole], fill=0, outline=0)
+    return np.asarray(mask, dtype=bool)
+
+
+def room_shapes(room: Dict[str, Any]) -> List[List[List[float]]]:
+    """Every polygon of a room: the main one plus ``extra_polygons`` (multi-part ResPlan living rooms)."""
+    main = room.get("polygon") or []
+    shapes = [main] if len(main) >= 3 else [bbox_to_polygon(room["bbox"])]
+    return shapes + [p for p in room.get("extra_polygons", []) if len(p) >= 3]
 
 def dilate_square(mask: np.ndarray, radius: int) -> np.ndarray:
     """Binary dilation with a ``(2r+1) x (2r+1)`` square structuring element.

@@ -94,8 +94,11 @@ prism/
     │   │   │   ├── snapshot_train/*.png             ← optional (visual checks, --image-source snapshot)
     │   │   │   └── Img/*.png                        ← optional (--image-source img)
     │   │   └── Network/data/data_{train,valid,test}.mat   ← optional, not used yet
-    │   └── resplan/                                 ← ResPlan files (*.pkl) when available
+    │   └── resplan/                                 ← unzip ResPlan.zip here
+    │       ├── ResPlan.pkl                          ← REQUIRED for resplan / combined (~17k plans)
+    │       └── split.json                           ← optional (official train/val/test split)
     └── processed/<dataset>/<preview|full>/          ← written by phases 02–05 (do not edit)
+                                                       <dataset> = rplan | resplan | combined
         ├── layouts_json/   graphs_json/   images/
         ├── metadata/       splits/splits.json
         └── packed/         (phase 05 --pack: layouts.jsonl.gz, graphs.jsonl.gz, images.zip)
@@ -113,7 +116,7 @@ The old `.pkl` files (`dataset_index.pkl`, `vision_embeddings*.pkl`,
 changed in `configs/env/local.yaml` or with `--set paths.data_root=...`.
 
 No real data yet? `python scripts/make_synthetic_dataset.py` writes a tiny fake
-dataset into `data_synthetic/` to try the pipeline (see section 5).
+RPLAN + fake ResPlan into `data_synthetic/` to try the pipeline (see section 5).
 
 ---
 
@@ -131,7 +134,7 @@ Preview and full write to different folders (`.../preview/` and
 `.../full/`), so they never overwrite each other.
 
 ```bash
-python scripts/03_build_graphs.py --mode preview        # look at outputs/rplan/preview/03_build_graphs/report.html
+python scripts/03_build_graphs.py --mode preview        # look at outputs/{rplan,resplan}/preview/03_build_graphs/report.html
 python scripts/03_build_graphs.py --mode full           # happy? run it on everything
 ```
 
@@ -183,6 +186,9 @@ python scripts/03_build_graphs.py --mode preview --set geometry.wall_dilation_px
 
 ## 5. Smoke test with synthetic data (no dataset needed)
 
+`make_synthetic_dataset.py` writes a fake RPLAN pickle (+ snapshots) and a fake
+`ResPlan.pkl` (+ `split.json`), so the default `combined` run works end to end.
+
 ```bash
 python scripts/make_synthetic_dataset.py
 python scripts/run_all.py --mode preview --n 100 \
@@ -200,7 +206,7 @@ configs/            default.yaml (all parameters), env/{local,cluster}.yaml, roo
 scripts/            00_… 12_ numbered phases, run_all.py, make_synthetic_dataset.py
 src/prism/
   common/           config, workspace paths, device (cuda/mps/cpu), io, HTML reports, plots
-  datasets/         schema + taxonomy, rplan.py, resplan.py (experimental), store.py, synthetic.py
+  datasets/         schema + taxonomy, rplan.py, resplan.py, store.py (also merges datasets), synthetic.py
   geometry/         polygon ops, adjacency.py, relations.py, front_door.py
   graph/            build.py (graph JSON), descriptor.py, features.py, data.py, models.py, train.py
   vision/           render.py, encoders.py
@@ -209,6 +215,7 @@ src/prism/
   evaluation/       metrics.py (architectural metrics, Recall@K, GED)
 cluster/            config.sh, setup_env.sh, predownload_models.py, slurm/*.sbatch
 docs/relations.md   how adjacency, relations and the front door are computed
+docs/datasets.md    how RPLAN and ResPlan are combined in one gallery
 tests/              unit tests (pytest)
 ```
 
@@ -220,21 +227,23 @@ Windows/CUDA, macOS/MPS and the cluster.
 
 ## 7. RPLAN + ResPlan
 
-All downstream code works on the unified **layout JSON / graph JSON** schema
-(`src/prism/datasets/schema.py`):
+The default is `dataset: combined`: RPLAN and ResPlan in **one gallery**.
 
-- room types carry a fine type (dataset-specific) **and** a unified type
-  (`configs/room_types.yaml`, ResPlan granularity);
-- edges carry a connection type (`wall` / `door` / `arch` / `entrance`);
-- the front door has the same representation in both datasets.
+- Phases 01–04 run once per dataset (`data/processed/{rplan,resplan}/...`);
+  phase 05 builds each dataset's split, then the merged one; phases 06–12 work
+  on the merged gallery (`artifacts/combined/...`, `outputs/combined/...`).
+- Layout ids are prefixed with the dataset (`rplan_75342`, `resplan_5012`).
+- Room types carry a fine (dataset-specific) and a unified type; the unified
+  types are used whenever both datasets are mixed (`taxonomy.level: auto`).
+- `--dataset rplan` or `--dataset resplan` works on one dataset only.
+- ResPlan rooms are converted into an RPLAN-style partition (rooms meet on wall
+  centre lines, balconies attached), so both datasets render in the same style.
+  `python scripts/resplan_geometry_check.py` compares original / before / after
+  renders on a sample of plans.
 
-To add ResPlan:
-1. put its files in `data/raw/resplan/`;
-2. check `src/prism/datasets/resplan.py` against the real format (it was
-   written from the paper);
-3. run the phases with `--dataset resplan`.
-
-To train or retrieve across both datasets, use `--set graph.type_vocab=unified`.
+Details: [`docs/datasets.md`](docs/datasets.md) (how the datasets are aligned,
+what to check in the reports) and [`docs/relations.md`](docs/relations.md)
+(adjacency, connection types, front door).
 
 ---
 
@@ -246,5 +255,19 @@ To train or retrieve across both datasets, use `--set graph.type_vocab=unified`.
   `--set` (experiments). Machine-specific paths go in `configs/env/*.yaml`.
 - To compare experiments, run them with different output roots, e.g.
   `--set paths.outputs_root=outputs_gat`, then
-  `python scripts/12_compare_pipelines.py --evaluation outputs_gat/rplan/full/11_evaluate:gat`.
+  `python scripts/12_compare_pipelines.py --evaluation outputs_gat/combined/full/11_evaluate:gat`.
 - Before pushing: `python -m pytest tests -q` and `ruff check src scripts`.
+
+---
+
+## 9. Troubleshooting
+
+- `ModuleNotFoundError: scipy` / `shapely` when loading a pickle: the RPLAN
+  pickle stores scipy objects and `ResPlan.pkl` stores shapely geometries, so
+  both are needed just to open the files: `pip install -r requirements/base.txt`.
+- `taxonomy.level=fine is not allowed for the combined dataset`: RPLAN and
+  ResPlan fine types are different vocabularies; use `unified` (or `auto`).
+- `The GNN was trained with a different room-type vocabulary`: a checkpoint is
+  tied to its dataset / taxonomy level. Re-run phase 06 for the dataset you use.
+- Files named `10154 2.json` in `data/processed/`: copies made by Finder or
+  iCloud. Phase 05 would count them as extra plans; delete them (or re-run 02–04).

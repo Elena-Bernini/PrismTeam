@@ -10,7 +10,12 @@ cluster). It reports which phases can run and writes a small report.
 import importlib
 import platform
 
-import _bootstrap  # noqa: F401
+import sys
+from pathlib import Path
+
+# Make `import prism` work however the script is launched (python scripts/x.py,
+# VS Code "Run Python File", python -m scripts.x) even without `pip install -e .`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from prism.common.cli import build_parser, setup
 from prism.common.device import describe_device, resolve_device
@@ -19,7 +24,7 @@ from prism.common.report import HtmlReport
 from prism.retrieval.index import faiss_available
 
 PHASE = "00_check_env"
-LIBS = ["numpy", "PIL", "matplotlib", "yaml", "tqdm", "networkx", "torch", "torchvision",
+LIBS = ["numpy", "scipy", "shapely", "PIL", "matplotlib", "yaml", "tqdm", "networkx", "torch", "torchvision",
         "transformers", "timm", "faiss"]
 
 
@@ -51,6 +56,9 @@ def main():
         "rplan_pickle_found": ws.raw_path("rplan.pkl").exists(),
         "rplan_pickle_path": str(ws.raw_path("rplan.pkl")),
         "rplan_snapshots_found": ws.raw_path("rplan.snapshot_dir").exists(),
+        "resplan_pickle_found": ws.raw_path("resplan.pkl").exists(),
+        "resplan_pickle_path": str(ws.raw_path("resplan.pkl")),
+        "resplan_split_found": ws.raw_path("resplan.split_json").exists(),
     }
     torch_ok = libs["torch"] is not None
     info["phases"] = {
@@ -66,11 +74,18 @@ def main():
     write_json(out / "environment.json", info)
     rep = HtmlReport("00 - Environment check", f"{ws.dataset} · {ws.mode}")
     rep.kpis({"device": info["device_description"], "index backend": info["faiss_backend"],
-              "python": info["python"], "RPLAN pickle": "found" if info["rplan_pickle_found"] else "MISSING"})
+              "python": info["python"], "RPLAN pickle": "found" if info["rplan_pickle_found"] else "MISSING",
+              "ResPlan pickle": "found" if info["resplan_pickle_found"] else "MISSING"})
     rep.heading("Libraries")
     rep.table([{"library": k, "version": v or "not installed"} for k, v in libs.items()])
     rep.heading("What can run here")
     rep.table([{"phase": k, "status": v} for k, v in info["phases"].items()])
+    if not info["resplan_pickle_found"]:
+        rep.note(f"ResPlan pickle not found at {info['resplan_pickle_path']}. Unzip ResPlan.zip there, or work on "
+                 "RPLAN only with --dataset rplan.", warn=True)
+    if libs["shapely"] is None or libs["scipy"] is None:
+        rep.note("scipy and shapely are needed to open the RPLAN and ResPlan pickles: "
+                 "pip install -r requirements/base.txt", warn=True)
     if not info["rplan_pickle_found"]:
         rep.note(f"RPLAN pickle not found at {info['rplan_pickle_path']}. See README 'Where to put the data', "
                  "or generate a synthetic dataset with scripts/make_synthetic_dataset.py.", warn=True)

@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from prism.common.config import load_config  # noqa: E402
 from prism.datasets.schema import INVERSE_RELATION, RELATIONS  # noqa: E402
-from prism.geometry.adjacency import geometric_adjacency  # noqa: E402
+from prism.geometry.adjacency import RoomMasks, classify_connections, geometric_adjacency  # noqa: E402
 from prism.geometry.front_door import describe_front_door, door_facing  # noqa: E402
 from prism.geometry.polygon import bbox_to_polygon, dilate_square, point_in_polygon, polygon_area  # noqa: E402
 from prism.geometry.relations import spatial_relation  # noqa: E402
@@ -53,7 +53,7 @@ def test_adjacency_shared_wall_vs_corner():
     """Rooms across a 4 px wall are adjacent; rooms touching only at a corner are not."""
     rooms = [rect(10, 10, 50, 50), rect(54, 10, 90, 50), rect(54, 54, 90, 90)]
     boxes = [[10, 10, 50, 50], [54, 10, 90, 50], [54, 54, 90, 90]]
-    pairs = geometric_adjacency(rooms, boxes, 256, wall_dilation_px=3, min_contact_px=5)
+    pairs = geometric_adjacency(RoomMasks([[r] for r in rooms], 256, 3), boxes, min_contact_px=5)
     assert (0, 1) in pairs and (1, 2) in pairs
     assert (0, 2) not in pairs          # diagonal neighbours only meet at a corner
     assert pairs[(0, 1)] >= 30          # shared wall ~ 40 px
@@ -104,8 +104,67 @@ def test_graph_build_and_subgraph():
     seen = {(e["source"], e["target"]): e["relation"] for e in graph["edges"]}
     for (u, v), r in seen.items():
         assert seen[(v, u)] == INVERSE_RELATION[r]
-    arr = graph_to_arrays(graph, tax, "fine", True)
-    nd, ed = feature_dims(tax, "fine")
+    arr = graph_to_arrays(graph, tax, True)
+    nd, ed = feature_dims(tax)
     assert arr["x"].shape == (len(graph["nodes"]), nd) and arr["edge_attr"].shape[1] == ed
     sub = subgraph(graph, [0, 1])
     assert {n["id"] for n in sub["nodes"] if n["kind"] == "room"} == {0, 1}
+
+
+def test_connection_types_door_arch_wall():
+    """A door in the shared wall -> door; no wall between rooms -> arch; plain wall -> wall."""
+    rooms = [rect(10, 10, 50, 50), rect(54, 10, 90, 50), rect(10, 54, 50, 90)]
+    masks = RoomMasks([[r] for r in rooms], 128, 3)
+    pairs = [(0, 1), (0, 2)]
+    walls = [{"exterior": rect(6, 6, 94, 94), "holes": rooms}]
+    doors = [rect(50, 25, 54, 35)]                         # door in the wall between rooms 0 and 1
+    conn = classify_connections(pairs, masks, walls, doors, [], wall_thickness_px=4)
+    assert conn[(0, 1)] == "door" and conn[(0, 2)] == "wall"
+    open_walls = [{"exterior": rect(6, 6, 94, 94), "holes": [rect(10, 10, 90, 50), rooms[2]]}]  # no wall 0|1
+    conn = classify_connections(pairs, masks, open_walls, [], [], wall_thickness_px=4)
+    assert conn[(0, 1)] == "arch"
+    assert classify_connections(pairs, masks, None, None, None, 4)[(0, 1)] == "wall"   # RPLAN: no geometry
+
+
+def test_resplan_conversion_and_combined_taxonomy():
+    """Synthetic ResPlan plan: namespaced id, front door, unified taxonomy for combined."""
+    import random
+
+    from prism.datasets.resplan import convert_plan, normalize_keys
+    from prism.datasets.schema import Taxonomy, dataset_of
+    from prism.datasets.synthetic import make_resplan_plan
+    from prism.graph.build import build_graph
+
+    cfg = load_config("local")
+    plan = normalize_keys(make_resplan_plan(0, random.Random(3)))
+    layout = convert_plan(plan, 0, Taxonomy(cfg, "resplan"), cfg)
+    assert dataset_of(layout["id"]) == "resplan" and layout["front_door"]["entrance_room_id"] is not None
+    assert all(0 <= p[0] <= 256 and 0 <= p[1] <= 256 for r in layout["rooms"] for p in r["polygon"])
+    graph = build_graph(layout, cfg)
+    assert any(e["connection"] == "door" for e in graph["edges"])
+    tax = Taxonomy(cfg, "combined")
+    assert tax.level == "unified" and tax.key({"room_type_name": "MasterRoom", "unified_type": "bedroom"}) == "bedroom"
+
+
+def test_resplan_partition_tiles_the_outline():
+    """Partitioned ResPlan rooms tile the outline (no gaps, no overlaps) like RPLAN rooms."""
+    import random
+
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+
+    from prism.datasets.resplan import convert_plan, normalize_keys
+    from prism.datasets.schema import Taxonomy
+    from prism.datasets.synthetic import make_resplan_plan
+
+    cfg = load_config("local")
+    for seed in range(3):
+        plan = normalize_keys(make_resplan_plan(seed, random.Random(seed)))
+        layout = convert_plan(plan, 0, Taxonomy(cfg, "resplan"), cfg)
+        assert layout["geometry_hints"]["room_partition"]
+        rooms = [unary_union([Polygon(p) for p in [r["polygon"]] + r["extra_polygons"]]).buffer(0)
+                 for r in layout["rooms"]]
+        outline = Polygon(layout["boundary"]).buffer(0)
+        assert abs(unary_union(rooms).area / outline.area - 1) < 0.01       # rooms cover the outline
+        assert sum(r.area for r in rooms) / unary_union(rooms).area < 1.01  # and do not overlap
+        assert all(r.get("source_polygons") for r in layout["rooms"])     # originals kept for the labels

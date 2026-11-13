@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Sequence
 import numpy as np
 
 from prism.datasets.schema import Taxonomy
-from prism.graph.features import feature_dims, graph_to_arrays
+from prism.graph.features import feature_dims, graph_to_arrays, node_type_vocab
 
 
 def checkpoint_path(gnn_dir: Path) -> Path:
@@ -42,10 +42,13 @@ class GnnEncoder:
         self.taxonomy = taxonomy
         self.device = device
         self.batch_size = batch_size
-        node_dim, edge_dim = feature_dims(taxonomy, mc["type_vocab"])
-        if node_dim != mc["node_dim"] or edge_dim != mc["edge_dim"]:
-            raise ValueError("Feature dimensions changed since training "
-                             f"({node_dim},{edge_dim}) vs ({mc['node_dim']},{mc['edge_dim']}). Retrain phase 06.")
+        node_dim, edge_dim = feature_dims(taxonomy)
+        vocab = node_type_vocab(taxonomy)
+        if node_dim != mc["node_dim"] or edge_dim != mc["edge_dim"] or vocab != mc.get("vocab", vocab):
+            raise ValueError("The GNN was trained with a different room-type vocabulary or feature size "
+                             f"(trained: level={mc.get('taxonomy_level')}, dims=({mc['node_dim']},{mc['edge_dim']}); "
+                             f"now: level={taxonomy.level}, dims=({node_dim},{edge_dim})). "
+                             "Retrain phase 06 for this dataset / taxonomy level.")
         self.model = GraphEncoder(node_dim=node_dim, edge_dim=edge_dim, model=mc["model"],
                                   hidden_dim=mc["hidden_dim"], embed_dim=mc["embed_dim"],
                                   num_layers=mc["num_layers"], heads=mc["heads"], dropout=mc["dropout"],
@@ -55,7 +58,7 @@ class GnnEncoder:
 
     def arrays(self, graph: Dict[str, Any]) -> Dict[str, np.ndarray]:
         """Feature arrays of one graph, consistent with training."""
-        return graph_to_arrays(graph, self.taxonomy, self.cfg["type_vocab"], self.cfg["include_door"])
+        return graph_to_arrays(graph, self.taxonomy, self.cfg["include_door"], self.cfg.get("use_connections", True))
 
     def encode(self, graphs: Sequence[Dict[str, Any]]) -> np.ndarray:
         """Embed a list of graph dictionaries -> ``(len(graphs), dim)`` float32 matrix."""

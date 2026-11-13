@@ -3,7 +3,8 @@
 Strategies (``partial.strategy``):
 
 - ``random``           remove ``round(remove_ratio * n)`` random rooms (Pier)
-- ``remove_type``      remove every room of fine type ``remove_type`` (Pier)
+- ``remove_type``      remove every room whose type NAME is ``remove_type`` (at the active
+                       taxonomy level, or as a unified type, e.g. ``bedroom``) (Pier)
 - ``remove_bedroom``   remove one bedroom-like room (Pier)
 - ``remove_smallest``  remove the smallest room (Pier)
 - ``remove_largest``   remove the largest room (Pier)
@@ -50,10 +51,11 @@ def choose_visible_rooms(layout: Dict[str, Any], graph: Dict[str, Any], pcfg: Di
     elif strategy == "remove_type":
         if pcfg.get("remove_type") is None:
             raise ValueError("partial.remove_type must be set for strategy remove_type")
-        removed = {int(r["id"]) for r in rooms if int(r["room_type_id"]) == int(pcfg["remove_type"])} - protected
+        target = str(pcfg["remove_type"])
+        removed = {int(r["id"]) for r in rooms if target in (taxonomy.key(r), r["unified_type"])} - protected
         removed = removed or random_removal()
     elif strategy == "remove_bedroom":
-        beds = [int(r["id"]) for r in rooms if taxonomy.is_bedroom(int(r["room_type_id"])) and int(r["id"]) not in protected]
+        beds = [int(r["id"]) for r in rooms if taxonomy.is_bedroom(r) and int(r["id"]) not in protected]
         removed = {rng.choice(beds)} if beds else ({rng.choice(candidates)} if candidates else set())
     elif strategy in {"remove_smallest", "remove_largest"}:
         pool = [r for r in rooms if int(r["id"]) not in protected]

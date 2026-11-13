@@ -37,7 +37,8 @@ def door_features(graph: Dict[str, Any], taxonomy: Taxonomy, canvas: float = 256
     fd = graph.get("front_door")
     names = ["door_present", "door_cx", "door_cy", "door_width"]
     names += [f"door_facing_{f}" for f in FACINGS]
-    names += [f"entrance_type_{taxonomy.name(t)}" for t in taxonomy.fine_ids]
+    vocab = taxonomy.vocab()
+    names += [f"entrance_type_{t}" for t in vocab]
     names += ["door_hops_mean", "door_hops_max", "door_reachable_ratio"]
     if not fd:
         return [0.0] * len(names), names
@@ -47,8 +48,8 @@ def door_features(graph: Dict[str, Any], taxonomy: Taxonomy, canvas: float = 256
     if fd.get("entrance_room_id") is not None:
         for nd in room_nodes(graph):
             if int(nd["id"]) == int(fd["entrance_room_id"]):
-                entrance_type = int(nd["room_type_id"])
-    vec += [1.0 if entrance_type == t else 0.0 for t in taxonomy.fine_ids]
+                entrance_type = taxonomy.key(nd)
+    vec += [1.0 if entrance_type == t else 0.0 for t in vocab]
     hops = np.asarray([nd["door_hops"] for nd in room_nodes(graph)], dtype=np.float32)
     reach = hops[hops >= 0]
     vec += [float(reach.mean()) if len(reach) else 0.0, float(reach.max()) if len(reach) else 0.0,
@@ -56,8 +57,14 @@ def door_features(graph: Dict[str, Any], taxonomy: Taxonomy, canvas: float = 256
     return vec, names
 
 
-def graph_descriptor(graph: Dict[str, Any], layout: Optional[Dict[str, Any]], taxonomy: Taxonomy) -> Tuple[np.ndarray, List[str]]:
-    """Return ``(vector, feature_names)`` for one (possibly partial) graph."""
+def graph_descriptor(graph: Dict[str, Any], layout: Optional[Dict[str, Any]], taxonomy: Taxonomy,
+                     use_connections: bool = True) -> Tuple[np.ndarray, List[str]]:
+    """Return ``(vector, feature_names)`` for one (possibly partial) graph.
+
+    Room types are counted at the taxonomy level (fine for one dataset, unified
+    for combined). ``use_connections=False`` zeroes the door/arch/window ratios,
+    which only ResPlan provides (see ``graph.connection_features``).
+    """
     canvas = float((layout or {}).get("coordinate_system", {}).get("width", 256))
     nodes = room_nodes(graph)
     edges = room_edges(graph)
@@ -69,13 +76,14 @@ def graph_descriptor(graph: Dict[str, Any], layout: Optional[Dict[str, Any]], ta
     feats += [float(n), float(len(edges) // 2), (len(edges) / 2.0) / max(1.0, n * (n - 1) / 2.0)]
     names += ["num_rooms", "num_edges", "edge_density"]
 
-    type_counts = Counter(int(nd["room_type_id"]) for nd in nodes)
-    for t in taxonomy.fine_ids:
+    vocab = taxonomy.vocab()
+    type_counts = Counter(taxonomy.key(nd) for nd in nodes)
+    for t in vocab:
         feats.append(float(type_counts.get(t, 0)))
-        names.append(f"type_count_{taxonomy.name(t)}")
-    for t in taxonomy.fine_ids:
+        names.append(f"type_count_{t}")
+    for t in vocab:
         feats.append(type_counts.get(t, 0) / max(1, n))
-        names.append(f"type_ratio_{taxonomy.name(t)}")
+        names.append(f"type_ratio_{t}")
 
     rel_counts = Counter(e["relation"] for e in edges)
     for r in RELATIONS:
@@ -89,20 +97,20 @@ def graph_descriptor(graph: Dict[str, Any], layout: Optional[Dict[str, Any]], ta
     for c in CONNECTIONS:
         if c == "entrance":
             continue
-        feats.append(conn_counts.get(c, 0) / max(1, len(edges)))
+        feats.append(conn_counts.get(c, 0) / max(1, len(edges)) if use_connections else 0.0)
         names.append(f"connection_ratio_{c}")
 
     areas = np.asarray([float(nd.get("polygon_area_ratio", nd["area_ratio"])) for nd in nodes], dtype=np.float32)
     feats += [float(areas.mean()), float(areas.std()), float(areas.min()), float(areas.max())] if n else [0.0] * 4
     names += ["area_mean", "area_std", "area_min", "area_max"]
 
-    by_type: Dict[int, List[float]] = defaultdict(list)
+    by_type: Dict[str, List[float]] = defaultdict(list)
     for nd in nodes:
-        by_type[int(nd["room_type_id"])].append(float(nd.get("polygon_area_ratio", nd["area_ratio"])))
-    for t in taxonomy.fine_ids:
+        by_type[taxonomy.key(nd)].append(float(nd.get("polygon_area_ratio", nd["area_ratio"])))
+    for t in vocab:
         vals = by_type.get(t, [])
         feats += [float(np.sum(vals)) if vals else 0.0, float(np.mean(vals)) if vals else 0.0]
-        names += [f"area_sum_{taxonomy.name(t)}", f"area_mean_{taxonomy.name(t)}"]
+        names += [f"area_sum_{t}", f"area_mean_{t}"]
 
     cents = np.asarray([nd["centroid"] for nd in nodes], dtype=np.float32) / canvas if n else np.zeros((0, 2))
     feats += ([float(cents[:, 0].mean()), float(cents[:, 1].mean()), float(cents[:, 0].std()), float(cents[:, 1].std())]
@@ -127,7 +135,7 @@ def graph_descriptor(graph: Dict[str, Any], layout: Optional[Dict[str, Any]], ta
     names += ["degree_mean", "degree_std", "degree_max"]
 
     # Typed adjacency histogram over unified types (compact, order-free).
-    uni = taxonomy.vocab("unified")
+    uni = list(taxonomy.unified_names)
     type_of = {int(nd["id"]): nd["unified_type"] for nd in nodes}
     pair_counts = Counter()
     for e in edges:

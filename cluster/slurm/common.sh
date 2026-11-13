@@ -14,7 +14,7 @@ source "${PRISM_VENV}/bin/activate"
 cd "${PRISM_CODE_DIR}"
 
 export MODE="${MODE:-full}"
-export DATASET="${DATASET:-rplan}"
+export DATASET="${DATASET:-combined}"   # combined (RPLAN + ResPlan) | rplan | resplan
 export PYTHONUNBUFFERED=1
 # Extra options forwarded to every phase, e.g. sbatch --export=ALL,EXTRA="--set graph.model=gat"
 export EXTRA="${EXTRA:-}"

@@ -12,9 +12,12 @@ import numpy as np  # noqa: E402
 from matplotlib.patches import Polygon as MplPolygon  # noqa: E402
 
 from prism.datasets.schema import Taxonomy  # noqa: E402
-from prism.geometry.polygon import bbox_to_polygon  # noqa: E402
+from prism.geometry.polygon import room_shapes  # noqa: E402
 
 DOOR_COLOR = "#ffd600"
+# Edge colours by connection type (ResPlan); RPLAN edges are all "wall" (blue).
+CONNECTION_COLORS = {"wall": "#2f6fde", "door": "#c2185b", "arch": "#2e7d32", "window": "#7cb342",
+                     "entrance": "#d9822b", "unknown": "#9e9e9e"}
 RELATION_SHORT = {
     "left_of": "L", "right_of": "R", "above": "A", "below": "B",
     "left_above": "LA", "right_above": "RA", "left_below": "LB", "right_below": "RB",
@@ -41,11 +44,11 @@ def draw_layout(ax: Any, layout: Dict[str, Any], taxonomy: Taxonomy, labels: boo
     if len(boundary) >= 3:
         ax.add_patch(MplPolygon(boundary, closed=True, facecolor="#e0e0e0", edgecolor="none", zorder=1))
     for r in layout["rooms"]:
-        poly = r.get("polygon") or bbox_to_polygon(r["bbox"])
         hidden = vis is not None and int(r["id"]) not in vis
-        ax.add_patch(MplPolygon(poly, closed=True, zorder=2,
-                                facecolor="#bdbdbd" if hidden else taxonomy.color(int(r["room_type_id"])),
-                                edgecolor="#333333", linewidth=0.8, hatch="///" if hidden else None))
+        for poly in room_shapes(r):
+            ax.add_patch(MplPolygon(poly, closed=True, zorder=2,
+                                    facecolor="#bdbdbd" if hidden else taxonomy.color(r, "fine"),
+                                    edgecolor="#333333", linewidth=0.8, hatch="///" if hidden else None))
         if labels and not hidden:
             cx, cy = r["centroid"]
             ax.text(cx, cy, f"{r['id']}\n{r['room_type_name']}", ha="center", va="center", fontsize=5, zorder=6)
@@ -56,6 +59,24 @@ def draw_layout(ax: Any, layout: Dict[str, Any], taxonomy: Taxonomy, labels: boo
         (x1, y1), (x2, y2) = fd["segment"]
         ax.plot([x1, x2], [y1, y2], color=DOOR_COLOR, linewidth=4, solid_capstyle="butt", zorder=7)
         ax.plot([x1, x2], [y1, y2], color="black", linewidth=0.6, zorder=8)
+    setup_axes(ax, title, canvas)
+
+
+def draw_elements(ax: Any, layout: Dict[str, Any], title: str = "") -> None:
+    """Draw the building elements kept from ResPlan: walls (grey), doors (pink), windows (green), front door."""
+    canvas = float(layout["coordinate_system"]["width"])
+    for w in layout.get("walls", []):
+        ax.add_patch(MplPolygon(w["exterior"], closed=True, facecolor="#555555", edgecolor="none", zorder=2))
+        for h in w.get("holes", []):
+            ax.add_patch(MplPolygon(h, closed=True, facecolor="white", edgecolor="none", zorder=3))
+    for d in layout.get("doors", []):
+        ax.add_patch(MplPolygon(d, closed=True, facecolor="#e78ac3", edgecolor="none", zorder=4))
+    for w in layout.get("windows", []):
+        ax.add_patch(MplPolygon(w, closed=True, facecolor="#a6d854", edgecolor="none", zorder=4))
+    fd = layout.get("front_door")
+    if fd:
+        (x1, y1), (x2, y2) = fd["segment"]
+        ax.plot([x1, x2], [y1, y2], color=DOOR_COLOR, linewidth=4, zorder=7)
     setup_axes(ax, title, canvas)
 
 
@@ -74,8 +95,8 @@ def draw_graph(ax: Any, layout: Dict[str, Any], graph: Dict[str, Any], taxonomy:
             continue
         (x1, y1), (x2, y2) = pos[u], pos[v]
         is_door = e.get("connection") == "entrance"
-        ax.plot([x1, x2], [y1, y2], color="#d9822b" if is_door else "#2f6fde", linewidth=1.2,
-                linestyle="--" if is_door else "-", zorder=9)
+        ax.plot([x1, x2], [y1, y2], color=CONNECTION_COLORS.get(e.get("connection", "wall"), "#2f6fde"),
+                linewidth=1.4, linestyle="--" if is_door else "-", zorder=9)
         if relation_labels:
             ax.text((x1 + x2) / 2, (y1 + y2) / 2, f"{u}{RELATION_SHORT.get(e['relation'], '?')}{v}",
                     fontsize=4.5, ha="center", va="center", zorder=11,

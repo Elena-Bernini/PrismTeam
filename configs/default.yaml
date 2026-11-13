@@ -8,7 +8,17 @@
 #   4. --set key.subkey=value             (command line, repeatable)
 # =============================================================================
 
-dataset: rplan            # rplan | resplan (resplan adapter is a stub for now)
+dataset: combined         # combined = RPLAN + ResPlan in one gallery (default) | rplan | resplan
+                          # Phases 01-04 run once per member dataset; 05 builds each dataset's
+                          # split and then the merged one; 06-12 work on the merged gallery.
+
+combined:
+  datasets: [rplan, resplan]   # each one is converted separately (phases 01-04), then merged
+
+taxonomy:
+  level: auto             # fine | unified | auto (fine for one dataset, unified for combined)
+                          # fine = dataset-specific room types (RPLAN MasterRoom/SecondRoom/...)
+                          # unified = cross-dataset types (bedroom, bathroom, ...) - see room_types.yaml
 mode: preview             # preview | full   (every script also accepts --mode)
 
 paths:
@@ -39,13 +49,39 @@ rplan:
   canvas: 256             # Graph2Plan coordinates live in a 256x256 canvas
 
 resplan:
-  root: raw/resplan       # see src/prism/datasets/resplan.py
+  # Files from https://github.com/m-agour/ResPlan (unzip ResPlan.zip) or the Kaggle release.
+  pkl: raw/resplan/ResPlan.pkl
+  split_json: raw/resplan/split.json   # official train/val/test/augmented split (optional)
+  include_augmented: false             # the 683 rotated/flipped/scaled copies of 667 originals
+  canvas: 256
+  fit_ratio: 0.67         # longest side of the partitioned plan (balconies and half exterior walls included) /
+                          # canvas. 0.67 matches RPLAN on the real data: median outline side ~172 px and
+                          # outline-area ratio ~0.26 (RPLAN 172.5 px, 0.255; preview of 200 + 300 plans)
+  wall_px_min: 2          # lower bound for the wall thickness in canvas pixels
+  room_partition: true    # turn wall-separated rooms into an RPLAN-style partition (rooms meet on wall centre
+                          # lines, balconies attached, no double walls) - see src/prism/datasets/resplan_geometry.py
+  partition:
+    growth: 0.55          # how far rooms grow into the walls, x wall_depth (interior walls ~0.7, exterior ~1)
+    steps: 6              # growth increments (neighbours meet half-way across a wall, error <= one step)
+    closing: 0.75         # morphological closing of the outline, x wall_depth (fills notches and slivers)
+    regularize: 0.4       # per-room opening/closing, x wall_depth (removes door recesses and wall stubs)
+    snap: 1.5             # merge x / y coordinates closer than this, x wall_depth (removes small steps)
+    fill_holes: 0.05      # unlabelled pockets inside the plan up to this share of its area go to a neighbour
+    simplify: 0.25        # coverage simplification tolerance, x wall_depth (shared edges stay shared)
+  outdoor_categories: [garden, parking, pool]   # not rooms of the apartment; skipped unless include_outdoor
+  include_outdoor: false
+  open_passage_min_px: 6  # an un-walled shared boundary at least this long = "arch" (open passage)
+  door_min_px: 4          # a door polygon covering at least this length of the shared wall = "door"
+                          # (tuned on the real ResPlan.pkl against its own via_door / adjacency edge types)
 
 # -----------------------------------------------------------------------------
 # Phase 03 - adjacency and spatial relations (see docs/relations.md)
 # -----------------------------------------------------------------------------
 geometry:
-  adjacency_source: geometric   # geometric | g2p | union
+  adjacency_source: geometric   # geometric | source | union   (source = edges shipped with the dataset:
+                                #  Graph2Plan edge list for RPLAN, plan["graph"] for ResPlan/Kaggle)
+                                # ResPlan layouts carry their own wall thickness; it overrides
+                                # wall_dilation_px for those plans.
   wall_dilation_px: 3           # each room mask is dilated by this many pixels
   min_contact_px: 5             # minimum shared-wall length to call two rooms adjacent
   containment_threshold: 0.9    # bbox overlap ratio for inside / surrounding
@@ -67,6 +103,7 @@ render:
   draw_front_door: true
   front_door_width: 4
   unknown_fill: "#bdbdbd"       # colour of masked (removed) rooms in partial queries
+  palette: unified              # unified (same colours for RPLAN and ResPlan, needed for combined) | fine
 
 # -----------------------------------------------------------------------------
 # Phase 05 - splits and packing
@@ -81,7 +118,10 @@ splits:
 # Phase 06/07 - graph pipeline
 # -----------------------------------------------------------------------------
 graph:
-  type_vocab: fine              # fine (dataset-specific ids) | unified (cross-dataset taxonomy)
+  connection_features: auto     # auto | true | false. RPLAN has no doors/walls, so every RPLAN edge is
+                                # "wall" while ResPlan has door/arch/window: in combined mode these
+                                # features would let the model tell the datasets apart instead of
+                                # comparing layouts, so auto = off for combined, on otherwise.
   include_door_node: true       # use the virtual FrontDoor node in the GNN input
   model: sage                   # gcn | sage | gat
   hidden_dim: 64

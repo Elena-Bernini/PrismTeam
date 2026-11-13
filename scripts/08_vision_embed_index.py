@@ -20,13 +20,18 @@ import random
 import numpy as np
 from PIL import Image
 
-import _bootstrap  # noqa: F401
+import sys
+from pathlib import Path
+
+# Make `import prism` work however the script is launched (python scripts/x.py,
+# VS Code "Run Python File", python -m scripts.x) even without `pip install -e .`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from prism.common.cli import Timer, build_parser, setup
 from prism.common.device import describe_device, empty_cache, resolve_device, torch_available
 from prism.common.io import progress
 from prism.common.report import HtmlReport, finalize_report
-from prism.datasets.store import LayoutStore, load_splits, resolve_image_path
+from prism.datasets.store import LayoutStore, load_splits
 from prism.retrieval.index import VectorIndex
 from prism.retrieval.visual import retrieval_figure
 from prism.vision.encoders import build_encoder, index_name, needs_torch
@@ -35,11 +40,11 @@ PHASE = "08_vision_embed_index"
 CHUNK = 512  # images loaded in memory at once
 
 
-def load_image(store, ws, sid, source):
+def load_image(store, sid, source):
     """Load the image of ``sid`` for the chosen source (renders may come from the packed zip)."""
     if source == "render":
         return store.image(sid)
-    return Image.open(resolve_image_path(ws, sid, source)).convert("RGB")
+    return Image.open(store.image_path(sid, source)).convert("RGB")
 
 
 def main():
@@ -57,7 +62,9 @@ def main():
     splits = load_splits(ws)
     ids = store.graph_ids()
     if source != "render":
-        missing = [s for s in ids if not resolve_image_path(ws, s, source).exists()]
+        if ws.dataset != "rplan":
+            raise SystemExit(f"--image-source {source} exists only for RPLAN. Use render for '{ws.dataset}'.")
+        missing = [s for s in ids if not store.image_path(s, source).exists()]
         if missing:
             print(f"  [warn] {len(missing)} ids have no '{source}' image and are skipped")
             ids = [s for s in ids if s not in set(missing)]
@@ -74,7 +81,7 @@ def main():
             encoder = build_encoder(name, vcfg, device)
             chunks = []
             for start in progress(range(0, len(ids), CHUNK), f"{name} chunks", total=(len(ids) + CHUNK - 1) // CHUNK):
-                imgs = [load_image(store, ws, s, source) for s in ids[start:start + CHUNK]]
+                imgs = [load_image(store, s, source) for s in ids[start:start + CHUNK]]
                 chunks.append(encoder.encode(imgs))
             X = np.concatenate(chunks, axis=0)
             del encoder

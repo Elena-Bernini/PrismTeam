@@ -3,7 +3,7 @@
 Graph JSON (``graphs_json/<id>.json``)::
 
     {
-      "id": "75342", "dataset": "rplan",
+      "id": "rplan_75342", "dataset": "rplan",
       "nodes": [{
           "id": 0, "kind": "room" | "front_door",
           "room_type_id": 7, "room_type_name": "SecondRoom", "unified_type": "bedroom",
@@ -16,15 +16,15 @@ Graph JSON (``graphs_json/<id>.json``)::
       "edges": [{                            # every adjacency appears twice (u->v and v->u)
           "source": 0, "target": 1,
           "relation": "left_of", "relation_id": 0,     # source relative to target
-          "connection": "wall",                        # wall | door | arch | entrance | unknown
+          "connection": "wall",                        # wall | door | arch | window | entrance | unknown
           "shared_wall_px": 38.0,
           "dx": -0.2, "dy": 0.01, "overlap_x": 0.0, "overlap_y": 0.93,
-          "in_geometric": true, "in_g2p": true
+          "in_geometric": true, "in_source": true
       }, ...],
       "front_door": {"facing": "south", "orientation": "horizontal", "center": [...],
                      "width_px": 12.0, "entrance_room_id": 3, "node_id": 8},
       "adjacency": {"source": "geometric", "wall_dilation_px": 3, "min_contact_px": 5},
-      "comparison_with_g2p": {"geometric_pairs": 9, "g2p_pairs": 8, "common_pairs": 7}
+      "comparison_with_source": {"geometric_pairs": 9, "source_pairs": 8, "common_pairs": 7}
     }
 """
 
@@ -36,19 +36,19 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 import numpy as np
 
 from prism.datasets.schema import FRONT_DOOR_NODE_TYPE, RELATION_TO_ID
-from prism.geometry.adjacency import geometric_adjacency
-from prism.geometry.polygon import bbox_to_polygon
+from prism.geometry.adjacency import RoomMasks, classify_connections, geometric_adjacency
+from prism.geometry.polygon import bbox_to_polygon, room_shapes
 from prism.geometry.relations import inverse_relation, relation_features, spatial_relation
 
 
 def _room_polygon(room: Dict[str, Any]) -> List[List[float]]:
-    """Polygon of a room, falling back to its bounding box rectangle."""
+    """Main polygon of a room, falling back to its bounding box rectangle."""
     poly = room.get("polygon") or []
     return poly if len(poly) >= 3 else bbox_to_polygon(room["bbox"])
 
 
 def _make_edge(u: int, v: int, box_u, box_v, rel: str, shared: float, connection: str,
-               in_geo: bool, in_g2p: bool, canvas: float) -> Dict[str, Any]:
+               in_geo: bool, in_src: bool, canvas: float) -> Dict[str, Any]:
     """Assemble one directed edge record with its geometric attributes."""
     f = relation_features(box_u, box_v, canvas)
     return {
@@ -58,12 +58,15 @@ def _make_edge(u: int, v: int, box_u, box_v, rel: str, shared: float, connection
         "shared_wall_px": float(shared),
         "dx": f["dx"], "dy": f["dy"],
         "overlap_x": min(1.0, f["overlap_x"]), "overlap_y": min(1.0, f["overlap_y"]),
-        "in_geometric": bool(in_geo), "in_g2p": bool(in_g2p),
+        "in_geometric": bool(in_geo), "in_source": bool(in_src),
     }
 
 
-def g2p_pairs(layout: Dict[str, Any]) -> Set[Tuple[int, int]]:
-    """Undirected room pairs listed in the original Graph2Plan edge list."""
+def source_pairs(layout: Dict[str, Any]) -> Set[Tuple[int, int]]:
+    """Undirected room pairs listed in the edges shipped with the dataset.
+
+    RPLAN: Graph2Plan's ``sample.edge``; ResPlan: ``plan["graph"]`` (Kaggle release).
+    """
     n = len(layout["rooms"])
     out: Set[Tuple[int, int]] = set()
     for e in layout.get("source_edges", []):
@@ -71,6 +74,46 @@ def g2p_pairs(layout: Dict[str, Any]) -> Set[Tuple[int, int]]:
         if 0 <= u < n and 0 <= v < n and u != v:
             out.add((min(u, v), max(u, v)))
     return out
+
+
+# Backwards-compatible name used by older scripts.
+g2p_pairs = source_pairs
+
+
+def wall_radius(layout: Dict[str, Any], cfg: Dict[str, Any]) -> int:
+    """Dilation radius that bridges the plan's real walls (ResPlan wall thickness), else the config value."""
+    hint = (layout.get("geometry_hints") or {}).get("wall_thickness_px")
+    if hint:
+        return max(1, int(np.ceil(float(hint) / 2.0)) + 1)
+    return int(cfg["geometry"]["wall_dilation_px"])
+
+
+def dilation_radius(layout: Dict[str, Any], cfg: Dict[str, Any]) -> int:
+    """Dilation radius for adjacency.
+
+    RPLAN and partitioned ResPlan layouts (rooms meeting on wall centre lines) use
+    ``geometry.wall_dilation_px``, so both datasets follow the same rule; ResPlan
+    layouts with wall-separated rooms (``resplan.room_partition: false``) use their
+    own wall thickness.
+    """
+    hints = layout.get("geometry_hints") or {}
+    if hints.get("room_partition"):
+        return int(cfg["geometry"]["wall_dilation_px"])
+    return wall_radius(layout, cfg)
+
+
+def connection_masks(layout: Dict[str, Any], cfg: Dict[str, Any], masks: RoomMasks) -> RoomMasks:
+    """Room masks used to label door / arch / window / wall.
+
+    The labels look at the strip between two rooms where their shared wall is, so
+    they need the ORIGINAL wall-separated room polygons (``source_polygons`` of
+    partitioned ResPlan layouts) and a radius that bridges the real wall.
+    """
+    rooms = layout["rooms"]
+    if not any(r.get("source_polygons") for r in rooms):
+        return masks
+    shapes = [r.get("source_polygons") or room_shapes(r) for r in rooms]
+    return RoomMasks(shapes, masks.canvas, wall_radius(layout, cfg))
 
 
 def bfs_hops(n: int, undirected_pairs: Iterable[Tuple[int, int]], start: Optional[int]) -> List[int]:
@@ -95,46 +138,50 @@ def bfs_hops(n: int, undirected_pairs: Iterable[Tuple[int, int]], start: Optiona
 
 
 def build_graph(layout: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Compute nodes, adjacency, spatial relations and the front-door node for one layout."""
+    """Compute nodes, adjacency, connection types, spatial relations and the front-door node."""
     geo_cfg = cfg["geometry"]
     canvas = float(layout["coordinate_system"]["width"])
     rooms = layout["rooms"]
     n = len(rooms)
-    polys = [_room_polygon(r) for r in rooms]
     boxes = [r["bbox"] for r in rooms]
+    radius = dilation_radius(layout, cfg)
+    masks = RoomMasks([room_shapes(r) for r in rooms], int(canvas), radius)
 
-    geo = geometric_adjacency(polys, boxes, canvas=int(canvas),
-                              wall_dilation_px=int(geo_cfg["wall_dilation_px"]),
-                              min_contact_px=int(geo_cfg["min_contact_px"]))
-    g2p = g2p_pairs(layout)
+    geo = geometric_adjacency(masks, boxes, min_contact_px=int(geo_cfg["min_contact_px"]))
+    src = source_pairs(layout)
     source = geo_cfg["adjacency_source"]
     if source == "geometric":
         pairs = dict(geo)
-    elif source == "g2p":
-        pairs = {p: geo.get(p, 0.0) for p in g2p}
+    elif source in {"source", "g2p"}:
+        pairs = {p: geo.get(p, 0.0) for p in src}
     elif source == "union":
         pairs = dict(geo)
-        for p in g2p:
+        for p in src:
             pairs.setdefault(p, 0.0)
     else:
         raise ValueError(f"Unknown adjacency_source '{source}'")
 
-    # Connection type from the source dataset when it provides one (ResPlan:
-    # door / arch / wall). RPLAN does not, so its edges are "wall".
-    conn_map: Dict[Tuple[int, int], str] = {}
-    for e in layout.get("source_edges", []):
-        if e.get("connection"):
-            u, v = int(e["source"]), int(e["target"])
-            conn_map[(min(u, v), max(u, v))] = str(e["connection"])
+    # Connection types: from wall/door/window geometry when the layout has it
+    # (ResPlan), else "wall" (RPLAN). With adjacency_source=source, the dataset's
+    # own edge types are used when available.
+    hint = (layout.get("geometry_hints") or {}).get("wall_thickness_px", 2 * radius)
+    rp = cfg.get("resplan", {})
+    conn = classify_connections(list(pairs), connection_masks(layout, cfg, masks), layout.get("walls"), layout.get("doors"), layout.get("windows"),
+                                float(hint), float(rp.get("open_passage_min_px", 6)), float(rp.get("door_min_px", 4)))
+    if source in {"source", "g2p"}:
+        for e in layout.get("source_edges", []):
+            key = (min(int(e["source"]), int(e["target"])), max(int(e["source"]), int(e["target"])))
+            if e.get("connection") and key in conn:
+                conn[key] = str(e["connection"])
 
     ct, ot = float(geo_cfg["containment_threshold"]), float(geo_cfg["axis_overlap_threshold"])
     edges: List[Dict[str, Any]] = []
     for (i, j), shared in sorted(pairs.items()):
         rel = spatial_relation(boxes[i], boxes[j], ct, ot)
-        in_geo, in_g = (i, j) in geo, (i, j) in g2p
-        conn = conn_map.get((i, j), "wall")
-        edges.append(_make_edge(i, j, boxes[i], boxes[j], rel, shared, conn, in_geo, in_g, canvas))
-        edges.append(_make_edge(j, i, boxes[j], boxes[i], inverse_relation(rel), shared, conn, in_geo, in_g, canvas))
+        in_geo, in_s = (i, j) in geo, (i, j) in src
+        c = conn.get((i, j), "wall")
+        edges.append(_make_edge(i, j, boxes[i], boxes[j], rel, shared, c, in_geo, in_s, canvas))
+        edges.append(_make_edge(j, i, boxes[j], boxes[i], inverse_relation(rel), shared, c, in_geo, in_s, canvas))
 
     door = layout.get("front_door")
     entrance = door.get("entrance_room_id") if door else None
@@ -188,10 +235,10 @@ def build_graph(layout: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
         "nodes": nodes,
         "edges": edges,
         "front_door": door_block,
-        "adjacency": {"source": source, "wall_dilation_px": int(geo_cfg["wall_dilation_px"]),
+        "adjacency": {"source": source, "wall_dilation_px": radius,
                       "min_contact_px": int(geo_cfg["min_contact_px"])},
-        "comparison_with_g2p": {"geometric_pairs": len(geo), "g2p_pairs": len(g2p),
-                                "common_pairs": len(set(geo) & g2p)},
+        "comparison_with_source": {"geometric_pairs": len(geo), "source_pairs": len(src),
+                                   "common_pairs": len(set(geo) & src)},
     }
 
 

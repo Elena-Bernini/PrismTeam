@@ -24,7 +24,7 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from prism.datasets.schema import SCHEMA_VERSION, Taxonomy
+from prism.datasets.schema import SCHEMA_VERSION, Taxonomy, make_id
 from prism.geometry.front_door import describe_front_door, door_segment_from_g2p_boundary
 from prism.geometry.polygon import (as_points, bbox_iou, bbox_to_polygon, polygon_area,
                                     polygon_bbox)
@@ -44,6 +44,13 @@ def load_g2p_pickle(path: Path) -> Dict[str, Any]:
         except UnicodeDecodeError:
             f.seek(0)
             return pickle.load(f, encoding="latin1")
+        except ModuleNotFoundError as exc:
+            # The Graph2Plan pickle stores scipy.io MATLAB structs: unpickling needs the
+            # library that defined them to be installed.
+            raise ModuleNotFoundError(
+                f"{exc}. The Graph2Plan pickle needs this package to be loaded: "
+                f"run `pip install {exc.name}` (or `pip install -r requirements/base.txt`)."
+            ) from exc
 
 
 def samples_from_pickle(obj: Any) -> List[Any]:
@@ -156,8 +163,8 @@ def convert_sample(sample: Any, taxonomy: Taxonomy, cfg: Dict[str, Any], pkl_pat
         rooms.append({
             "id": room_id,                                   # local node index
             "room_type_id": type_id,                         # official Graph2Plan/RPLAN id
-            "room_type_name": taxonomy.name(type_id),
-            "unified_type": taxonomy.unified(type_id),
+            "room_type_name": taxonomy.rplan_name(type_id),
+            "unified_type": taxonomy.rplan_unified(type_id),
             "bbox": [x_min, y_min, x_max, y_max],
             "width": w,
             "height": h,
@@ -186,7 +193,8 @@ def convert_sample(sample: Any, taxonomy: Taxonomy, cfg: Dict[str, Any], pkl_pat
 
     return {
         "schema_version": SCHEMA_VERSION,
-        "id": sid,
+        "id": make_id("rplan", sid),                     # global id, unique across datasets
+        "source_id": sid,                                # id inside RPLAN (snapshot file name)
         "dataset": "rplan",
         "coordinate_system": {"width": canvas, "height": canvas, "origin": "top_left",
                               "x_axis": "right", "y_axis": "down", "units": "px"},

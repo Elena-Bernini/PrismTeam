@@ -1,10 +1,11 @@
 # Core dependencies (phases 01-05, descriptor + colorhist pipelines, evaluation).
 # PyTorch is installed separately because the right build depends on the machine (see README).
 numpy>=1.24
+scipy>=1.11          # needed to unpickle data_train_converted.pkl (it stores scipy MATLAB structs)
+shapely>=2.0         # needed to unpickle ResPlan.pkl (it stores shapely geometries)
 pillow>=9.5
 matplotlib>=3.7
 pyyaml>=6.0
 tqdm>=4.65
 networkx>=3.0
 faiss-cpu>=1.7.4
-shapely>=2.0          # only to unpickle ResPlan.pkl (--dataset resplan)

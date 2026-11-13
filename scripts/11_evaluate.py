@@ -8,7 +8,9 @@ Recall@K needs a notion of relevance. A gallery plan is RELEVANT to a query
 when it has the same unified room composition (same number of bedrooms,
 bathrooms, kitchens, ...) AND an adjacency similarity >= ``evaluation.
 relevance_adjacency_tau``. We report Recall@K = hits / min(K, |relevant|),
-Hit@K, Precision@K and MRR. Optional: graph edit distance on a few pairs
+Hit@K, Precision@K and MRR. With ``--dataset combined`` the report also breaks
+results down by query dataset and measures how often each pipeline retrieves
+from the same dataset as the query. Optional: graph edit distance on a few pairs
 (``--set evaluation.ged.enabled=true``).
 
     python scripts/11_evaluate.py --mode preview
@@ -19,7 +21,12 @@ from collections import defaultdict
 
 import numpy as np
 
-import _bootstrap  # noqa: F401
+import sys
+from pathlib import Path
+
+# Make `import prism` work however the script is launched (python scripts/x.py,
+# VS Code "Run Python File", python -m scripts.x) even without `pip install -e .`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from prism.common.cli import build_parser, setup
 from prism.common.io import progress, read_jsonl, write_csv, write_json
@@ -76,6 +83,8 @@ def main():
             for r in rec["results"][:k]:
                 m = evaluate_pair(qs, gallery[r["id"]])
                 row = {"pipeline": pipeline, "query_id": q, "rank": r["rank"], "retrieved_id": r["id"],
+                       "query_dataset": qs.dataset, "retrieved_dataset": gallery[r["id"]].dataset,
+                       "same_dataset": int(qs.dataset == gallery[r["id"]].dataset),
                        "vector_score": r.get("score"), "relevant": int(r["id"] in relevant), **m}
                 if ged_budget > 0:
                     row["ged_normalised"] = graph_edit_distance(store.graph(q), store.graph(r["id"]),
@@ -83,7 +92,8 @@ def main():
                     ged_budget -= 1
                 rows.append(row)
             per_result.extend(rows)
-            qrow = {"pipeline": pipeline, "query_id": q, **rm}
+            qrow = {"pipeline": pipeline, "query_id": q, "query_dataset": qs.dataset,
+                    "relevant_in_other_dataset": sum(1 for x in relevant if gallery[x].dataset != qs.dataset), **rm}
             for key in KEY_METRICS:
                 qrow[f"mean_{key}"] = mean_of(rows, key)
             per_query.append(qrow)
@@ -101,7 +111,22 @@ def main():
             row[key] = mean_of(rs, key)
         if any("ged_normalised" in r for r in rs):
             row["ged_normalised"] = mean_of(rs, "ged_normalised")
+        if ws.is_combined:
+            row[f"same_dataset_rate@{k}"] = mean_of(rs, "same_dataset")
         summary.append(row)
+    by_dataset = []
+    if ws.is_combined:
+        for p in pipelines:
+            for d in sorted({r["query_dataset"] for r in per_query}):
+                qs = [r for r in per_query if r["pipeline"] == p and r["query_dataset"] == d]
+                rs = [r for r in per_result if r["pipeline"] == p and r["query_dataset"] == d]
+                if not qs:
+                    continue
+                by_dataset.append({"pipeline": p, "query dataset": d, "queries": len(qs),
+                                   f"recall@{k}": mean_of(qs, "recall_at_k"),
+                                   "architectural_score": mean_of(rs, "architectural_score"),
+                                   f"same_dataset_rate@{k}": mean_of(rs, "same_dataset"),
+                                   "relevant plans in the other dataset (mean)": mean_of(qs, "relevant_in_other_dataset")})
     by_rank = []
     for p in pipelines:
         for rank in range(1, k + 1):
@@ -114,12 +139,21 @@ def main():
     write_csv(out / "metrics_by_query.csv", per_query)
     write_csv(out / "metrics_by_rank.csv", by_rank)
     write_csv(out / "pipeline_summary.csv", summary)
+    if by_dataset:
+        write_csv(out / "summary_by_query_dataset.csv", by_dataset)
     write_json(out / "pipeline_summary.json", {"top_k": k, "relevance_tau": tau, "summary": summary})
 
     rep = HtmlReport("11 - Evaluation of complete-query retrieval", f"{ws.dataset} · {ws.mode}")
     rep.kpis({"pipelines": len(pipelines), "queries": len(per_query) // max(1, len(pipelines)), "top-k": k,
               "relevance": f"same composition & adjacency >= {tau}"})
     rep.table(summary)
+    if by_dataset:
+        rep.heading("By query dataset (combined gallery)")
+        rep.text(f"same_dataset_rate@{k} = share of the top-{k} coming from the same dataset as the query. "
+                 "Compare it with the share of relevant plans that live in the other dataset: a pipeline that "
+                 "almost never crosses datasets while relevant plans exist on the other side is matching dataset "
+                 "style (rendering, scale) rather than layout.")
+        rep.table(by_dataset)
     rep.figure(grouped_bars(KEY_METRICS + [f"recall@{k}"], {r["pipeline"]: [r[m] for m in KEY_METRICS + [f"recall@{k}"]]
                                                            for r in summary}, "Mean metrics over top-K results"))
     fig, ax = plt.subplots(figsize=(6.5, 3.4))

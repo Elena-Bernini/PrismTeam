@@ -4,8 +4,9 @@ Layout JSON (one file per floor plan, ``layouts_json/<id>.json``)::
 
     {
       "schema_version": "1.1",
-      "id": "75342",
-      "dataset": "rplan",
+      "id": "rplan_75342",                       # global id = <dataset>_<source id>
+      "source_id": "75342",                      # id inside the original dataset
+      "dataset": "rplan",                        # rplan | resplan
       "coordinate_system": {"width": 256, "height": 256, "origin": "top_left",
                             "x_axis": "right", "y_axis": "down", "units": "px"},
       "boundary": [[x, y], ...],                 # exterior outline (closed implicitly)
@@ -32,12 +33,16 @@ Layout JSON (one file per floor plan, ``layouts_json/<id>.json``)::
       "raw": {...}
     }
 
+ResPlan layouts additionally carry ``walls`` (polygons with holes), ``doors``,
+``windows``, ``geometry_hints.wall_thickness_px``, ``extra_polygons`` on rooms
+made of several parts and ``source_key`` (``bedroom_0`` ...) on each room.
+
 Graph JSON (``graphs_json/<id>.json``) - see :mod:`prism.graph.build`.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 SCHEMA_VERSION = "1.1"
 
@@ -69,9 +74,34 @@ INVERSE_RELATION: Dict[str, str] = {
 }
 
 # Edge connection types. RPLAN only gives "wall" (rooms adjacent across a wall,
-# door presence unknown); ResPlan distinguishes door / arch / wall; the virtual
+# door presence unknown). ResPlan has wall/door/window geometry, so its edges are
+# classified as door (a door polygon in the shared wall), arch (open passage, no
+# wall), window (e.g. room -> balcony through a window) or wall. The virtual
 # front-door node is connected with "entrance".
-CONNECTIONS: List[str] = ["wall", "door", "arch", "entrance", "unknown"]
+CONNECTIONS: List[str] = ["wall", "door", "arch", "window", "entrance", "unknown"]
+
+# Datasets that can be merged in the "combined" workspace. Layout ids are always
+# namespaced as "<dataset>_<source id>" so that they never collide.
+DATASETS: List[str] = ["rplan", "resplan"]
+COMBINED = "combined"
+
+
+def make_id(dataset: str, source_id: Any) -> str:
+    """Global layout id, e.g. ``rplan_75342`` or ``resplan_123``."""
+    return f"{dataset}_{source_id}"
+
+
+def dataset_of(layout_id: str) -> str:
+    """Dataset prefix of a global layout id (``rplan_75342`` -> ``rplan``)."""
+    for name in DATASETS:
+        if str(layout_id).startswith(name + "_"):
+            return name
+    raise ValueError(f"Layout id '{layout_id}' has no known dataset prefix {DATASETS}")
+
+
+def source_id_of(layout_id: str) -> str:
+    """Original id inside its dataset (``rplan_75342`` -> ``75342``)."""
+    return str(layout_id)[len(dataset_of(layout_id)) + 1:]
 CONNECTION_TO_ID: Dict[str, int] = {name: i for i, name in enumerate(CONNECTIONS)}
 
 # Name used for the virtual node that represents the front door.
@@ -88,56 +118,86 @@ G2P_RELATION_GUESS: Dict[int, str] = {
 
 
 class Taxonomy:
-    """Room-type lookups for one dataset, built from ``configs/room_types.yaml``."""
+    """Room-type lookups, built from ``configs/room_types.yaml``.
 
-    def __init__(self, cfg: Dict[str, Any], dataset: str = "rplan") -> None:
-        """Read the fine and unified taxonomies for ``dataset``."""
+    Two levels of room types exist:
+
+    - ``fine``: dataset-specific names (RPLAN ``MasterRoom``, ``SecondRoom`` ...;
+      ResPlan category keys ``bedroom``, ``living`` ...);
+    - ``unified``: the cross-dataset taxonomy (``bedroom``, ``bathroom`` ...).
+
+    Every layout room and graph node stores both (``room_type_name`` and
+    ``unified_type``). Code that compares, counts or one-hot-encodes room types
+    uses :meth:`key`, which returns the name at the active level. The level is
+    ``taxonomy.level`` in the config; ``auto`` = fine for one dataset, unified for
+    ``combined`` (fine names of different datasets are not comparable).
+    """
+
+    def __init__(self, cfg: Dict[str, Any], dataset: str = "rplan", level: Optional[str] = None) -> None:
+        """Read both datasets' taxonomies and resolve the active level."""
         rt = cfg["room_types"]
         self.dataset = dataset
         self.unified_colors: Dict[str, str] = dict(rt["unified_types"])
         self.unified_names: List[str] = list(self.unified_colors.keys())
-        self.fine: Dict[int, Dict[str, str]] = {}
-        if dataset == "rplan":
-            for key, (name, unified, color) in rt["rplan"].items():
-                self.fine[int(key)] = {"name": name, "unified": unified, "color": color}
-            self.extra = {int(k): v for k, v in rt.get("rplan_extra", {}).items()}
-        elif dataset == "resplan":
-            # ResPlan has no numeric fine ids: we enumerate its categories.
-            for i, (name, unified) in enumerate(rt["resplan"].items()):
-                self.fine[i] = {"name": name, "unified": unified,
-                                "color": self.unified_colors.get(unified, "#d9d9d9")}
-            self.extra = {}
-        else:
-            raise ValueError(f"Unknown dataset '{dataset}'")
-        self.fine_ids: List[int] = sorted(self.fine.keys())
-        self.name_to_id: Dict[str, int] = {v["name"]: k for k, v in self.fine.items()}
+        # RPLAN official ids -> fine name / unified type / colour.
+        self.rplan: Dict[int, Dict[str, str]] = {
+            int(k): {"name": v[0], "unified": v[1], "color": v[2]} for k, v in rt["rplan"].items()}
+        self.rplan_extra: Dict[int, str] = {int(k): v for k, v in rt.get("rplan_extra", {}).items()}
+        # ResPlan category key -> unified type.
+        self.resplan: Dict[str, str] = dict(rt["resplan"])
+        self.resplan_non_room: List[str] = list(rt.get("resplan_non_room", []))
+        self.fine_colors: Dict[str, str] = {v["name"]: v["color"] for v in self.rplan.values()}
+        for name, unified in self.resplan.items():
+            self.fine_colors.setdefault(name, self.unified_colors.get(unified, self.unified_colors["other"]))
 
-    def name(self, type_id: int) -> str:
-        """Fine type name for an id (``Unknown_<id>`` if not in the taxonomy)."""
-        if type_id in self.fine:
-            return self.fine[type_id]["name"]
-        return self.extra.get(type_id, f"Unknown_{type_id}")
+        requested = level or cfg.get("taxonomy", {}).get("level", "auto")
+        if requested == "auto":
+            requested = "unified" if dataset == COMBINED else "fine"
+        if requested not in {"fine", "unified"}:
+            raise ValueError(f"Unknown taxonomy level '{requested}'")
+        if dataset == COMBINED and requested == "fine":
+            raise ValueError("taxonomy.level=fine is not allowed for the combined dataset: RPLAN and ResPlan "
+                             "fine types are different vocabularies. Use unified (or auto).")
+        self.level = requested
 
-    def unified(self, type_id: int) -> str:
-        """Unified type for a fine id (``other`` if unknown)."""
-        return self.fine.get(type_id, {}).get("unified", "other")
+    # ----------------------------------------------------- dataset conversion
+    def rplan_name(self, type_id: int) -> str:
+        """RPLAN fine name of an official id (``Unknown_<id>`` if not a room id)."""
+        if type_id in self.rplan:
+            return self.rplan[type_id]["name"]
+        return self.rplan_extra.get(type_id, f"Unknown_{type_id}")
 
-    def color(self, type_id: int) -> str:
-        """Render colour for a fine id."""
-        return self.fine.get(type_id, {}).get("color", self.unified_colors["other"])
+    def rplan_unified(self, type_id: int) -> str:
+        """Unified type of an RPLAN id (``other`` if unknown)."""
+        return self.rplan.get(type_id, {}).get("unified", "other")
 
-    def unified_color(self, unified: str) -> str:
-        """Render colour for a unified type."""
-        return self.unified_colors.get(unified, self.unified_colors["other"])
+    def resplan_unified(self, category: str) -> str:
+        """Unified type of a ResPlan category key (``other`` if unknown)."""
+        return self.resplan.get(category, "other")
 
-    def is_bedroom(self, type_id: int) -> bool:
-        """True for every bedroom-like fine type (Master/Second/Guest/Child room in RPLAN)."""
-        return self.unified(type_id) == "bedroom"
-
-    def vocab(self, kind: str) -> List[str]:
-        """Return the node-type vocabulary used as one-hot features (``fine`` or ``unified``)."""
-        if kind == "fine":
-            return [self.name(i) for i in self.fine_ids]
-        if kind == "unified":
+    # --------------------------------------------------------- level-aware API
+    def vocab(self) -> List[str]:
+        """Room-type vocabulary at the active level (used for counts and one-hot features)."""
+        if self.level == "unified":
             return list(self.unified_names)
-        raise ValueError(f"Unknown vocabulary kind '{kind}'")
+        if self.dataset == "rplan":
+            return [self.rplan[i]["name"] for i in sorted(self.rplan)]
+        if self.dataset == "resplan":
+            return list(self.resplan.keys())
+        raise ValueError(f"No fine vocabulary for dataset '{self.dataset}'")
+
+    def key(self, item: Dict[str, Any]) -> str:
+        """Type name of a room / node at the active level."""
+        if self.level == "unified":
+            return str(item.get("unified_type", "other"))
+        return str(item.get("room_type_name", item.get("unified_type", "other")))
+
+    def is_bedroom(self, item: Dict[str, Any]) -> bool:
+        """True for every bedroom-like room (RPLAN Master/Second/Guest/Child room, ResPlan bedroom)."""
+        return item.get("unified_type") == "bedroom"
+
+    def color(self, item: Dict[str, Any], palette: str = "unified") -> str:
+        """Render colour of a room: by unified type (default, same for every dataset) or by fine type."""
+        if palette == "fine" and item.get("room_type_name") in self.fine_colors:
+            return self.fine_colors[item["room_type_name"]]
+        return self.unified_colors.get(item.get("unified_type", "other"), self.unified_colors["other"])

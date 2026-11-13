@@ -32,8 +32,8 @@ class LayoutSummary:
 
     sid: str
     n_rooms: int
+    dataset: str = ""
     type_counts: Counter = field(default_factory=Counter)
-    type_id_counts: Counter = field(default_factory=Counter)
     unified_counts: Counter = field(default_factory=Counter)
     area_by_type: Counter = field(default_factory=Counter)
     adjacency: Counter = field(default_factory=Counter)
@@ -54,27 +54,28 @@ def summarize(graph: Dict[str, Any], taxonomy: Taxonomy) -> LayoutSummary:
     """Build the :class:`LayoutSummary` of a graph dictionary."""
     nodes = room_nodes(graph)
     edges = room_edges(graph)
-    s = LayoutSummary(sid=str(graph["id"]), n_rooms=len(nodes))
+    s = LayoutSummary(sid=str(graph["id"]), n_rooms=len(nodes), dataset=str(graph.get("dataset", "")))
     name_of = {}
     for nd in nodes:
-        name = taxonomy.name(int(nd["room_type_id"]))
+        name = taxonomy.key(nd)
         name_of[int(nd["id"])] = name
         s.type_counts[name] += 1
-        s.type_id_counts[int(nd["room_type_id"])] += 1
         s.unified_counts[nd["unified_type"]] += 1
         s.area_by_type[name] += float(nd.get("polygon_area_ratio", nd["area_ratio"]))
         gx, gy = nd["grid_location_5x5"]
         s.grid[(name, int(gx), int(gy))] += 1
-        if taxonomy.is_bedroom(int(nd["room_type_id"])):
+        if taxonomy.is_bedroom(nd):
             s.bedrooms += 1
     for e in edges:
         u, v = int(e["source"]), int(e["target"])
         if u not in name_of or v not in name_of:
             continue
         s.triplets[(name_of[u], e["relation"], name_of[v])] += 1
+        # Relations are counted on BOTH directions of every adjacency, so the counts do
+        # not depend on how a dataset happens to number its rooms.
+        s.relations[e["relation"]] += 1
         if u < v:
             s.adjacency[tuple(sorted((name_of[u], name_of[v])))] += 1
-            s.relations[e["relation"]] += 1
     fd = graph.get("front_door") or {}
     if fd.get("entrance_room_id") is not None:
         s.entrance_type = name_of.get(int(fd["entrance_room_id"]))

@@ -20,14 +20,16 @@ from prism.vision.render import render_layout
 class DescriptorQueryEncoder:
     """Hand-crafted graph descriptor."""
 
-    def __init__(self, taxonomy: Taxonomy) -> None:
-        """Keep the taxonomy needed by the descriptor."""
+    def __init__(self, taxonomy: Taxonomy, use_connections: bool = True) -> None:
+        """Keep the taxonomy and the connection-feature switch used when the index was built."""
         self.taxonomy = taxonomy
+        self.use_connections = use_connections
 
     def encode(self, layouts: Sequence[Dict[str, Any]], graphs: Sequence[Dict[str, Any]],
                visible: Sequence[Optional[Sequence[int]]]) -> np.ndarray:
         """Descriptor of each (possibly partial) graph; the index applies its own scaler."""
-        return np.stack([graph_descriptor(g, l, self.taxonomy)[0] for l, g in zip(layouts, graphs)])
+        return np.stack([graph_descriptor(g, l, self.taxonomy, self.use_connections)[0]
+                         for l, g in zip(layouts, graphs)])
 
 
 class GnnQueryEncoder:
@@ -70,7 +72,7 @@ def make_query_encoder(meta: Dict[str, Any], ws: Workspace, cfg: Dict[str, Any],
     """Return the query encoder matching an index ``meta.json``."""
     pipeline, encoder = meta.get("pipeline"), meta.get("encoder")
     if pipeline == "graph" and encoder == "descriptor":
-        return DescriptorQueryEncoder(taxonomy)
+        return DescriptorQueryEncoder(taxonomy, bool(meta.get("use_connections", True)))
     if pipeline == "graph" and encoder == "gnn":
         return GnnQueryEncoder(ws, taxonomy, device)
     if pipeline == "vision":

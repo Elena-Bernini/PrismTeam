@@ -8,7 +8,7 @@ Every phase accepts the same core flags::
     --config extra.yaml     extra config files (repeatable)
     --set key=value         config overrides (repeatable)
     --device auto|cpu|cuda|mps
-    --dataset rplan|resplan
+    --dataset combined|rplan|resplan   (combined = both in one gallery, the default)
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def build_parser(description: str) -> argparse.ArgumentParser:
     parser.add_argument("--set", action="append", default=[], dest="overrides",
                         help="Override a config value, e.g. --set graph.model=gat")
     parser.add_argument("--device", default=None, help="auto | cpu | cuda | mps")
-    parser.add_argument("--dataset", default=None, help="rplan | resplan")
+    parser.add_argument("--dataset", default=None, help="combined (default) | rplan | resplan")
     return parser
 
 

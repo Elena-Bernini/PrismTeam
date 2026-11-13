@@ -47,7 +47,10 @@ rplan_extra:
   16: InteriorWall
   17: InteriorDoor
 
-# ResPlan category keys -> unified type (keys from the ResPlan paper, Sec. 4).
+# ResPlan category keys -> unified type. Keys are the geometry keys of a ResPlan
+# plan dictionary (the misspelled "balacony" is normalised to "balcony").
+# Phase 01 (--dataset resplan) lists every key found in the real file: add new
+# room categories here; non-room keys are listed under resplan_non_room.
 resplan:
   living: living
   bedroom: bedroom
@@ -57,5 +60,12 @@ resplan:
   storage: storage
   stair: stair
   dining: dining
+  veranda: balcony
+  garden: other
   parking: other
   pool: other
+
+# "neighbor" (tuple of neighbouring-unit geometries) and "area_change_sqft" (augmented
+# copies only) are present in the real ResPlan.pkl (2026-07-28 release).
+resplan_non_room: [wall, door, window, front_door, inner, land, graph, id, unitType, area, net_area, wall_depth,
+                   neighbor, area_change_sqft]

@@ -5,13 +5,17 @@ torch conversion happens in :mod:`prism.graph.data`.
 
 Node features (per node)::
 
-    one-hot node type   (fine or unified vocabulary, plus one slot for FrontDoor)
+    one-hot node type   (taxonomy vocabulary at the active level, plus one slot for FrontDoor)
     area ratio, centroid x, centroid y, bbox width, bbox height   (normalised)
     is_entrance_room, door_hops / 10 (1.0 when unknown), door_distance
 
 Edge features (per directed edge)::
 
-    one-hot relation (10) | one-hot connection (5) | dx, dy, overlap_x, overlap_y, shared_wall / canvas
+    one-hot relation (10) | one-hot connection (6) | dx, dy, overlap_x, overlap_y, shared_wall / canvas
+
+The connection one-hot is zeroed when ``use_connections`` is false (default for
+the combined dataset, see ``graph.connection_features``), so the feature size
+never changes.
 """
 
 from __future__ import annotations
@@ -27,37 +31,45 @@ NUM_DOOR_NODE_FEATS = 3
 NUM_GEOM_EDGE_FEATS = 5
 
 
-def node_type_vocab(taxonomy: Taxonomy, kind: str) -> List[str]:
-    """Node-type vocabulary (fine or unified) with the virtual ``FrontDoor`` type appended."""
-    return taxonomy.vocab(kind) + ["FrontDoor"]
+def node_type_vocab(taxonomy: Taxonomy) -> List[str]:
+    """Node-type vocabulary at the taxonomy level, with the virtual ``FrontDoor`` type appended."""
+    return taxonomy.vocab() + ["FrontDoor"]
 
 
-def feature_dims(taxonomy: Taxonomy, kind: str) -> Tuple[int, int]:
+def use_connection_features(cfg: Dict[str, Any]) -> bool:
+    """Resolve ``graph.connection_features`` (auto = off for the combined dataset)."""
+    value = cfg["graph"].get("connection_features", "auto")
+    if str(value).lower() == "auto":
+        return cfg["dataset"] != "combined"
+    return bool(value)
+
+
+def feature_dims(taxonomy: Taxonomy) -> Tuple[int, int]:
     """Return ``(node_feature_dim, edge_feature_dim)``."""
-    node_dim = len(node_type_vocab(taxonomy, kind)) + NUM_GEOM_NODE_FEATS + NUM_DOOR_NODE_FEATS
+    node_dim = len(node_type_vocab(taxonomy)) + NUM_GEOM_NODE_FEATS + NUM_DOOR_NODE_FEATS
     edge_dim = len(RELATIONS) + len(CONNECTIONS) + NUM_GEOM_EDGE_FEATS
     return node_dim, edge_dim
 
 
-def graph_to_arrays(graph: Dict[str, Any], taxonomy: Taxonomy, kind: str = "fine", include_door: bool = True,
-                    canvas: float = 256.0) -> Dict[str, np.ndarray]:
+def graph_to_arrays(graph: Dict[str, Any], taxonomy: Taxonomy, include_door: bool = True,
+                    use_connections: bool = True, canvas: float = 256.0) -> Dict[str, np.ndarray]:
     """Convert a graph dictionary into ``x``, ``edge_index`` and ``edge_attr`` arrays.
 
     Node ids in the JSON may be non-contiguous (partial graphs keep original
     ids), so nodes are re-indexed by their order in ``graph['nodes']``.
     """
-    vocab = node_type_vocab(taxonomy, kind)
+    vocab = node_type_vocab(taxonomy)
     vocab_index = {name: i for i, name in enumerate(vocab)}
     nodes = [nd for nd in graph["nodes"] if include_door or nd.get("kind", "room") == "room"]
     pos = {int(nd["id"]): k for k, nd in enumerate(nodes)}
-    node_dim, edge_dim = feature_dims(taxonomy, kind)
+    node_dim, edge_dim = feature_dims(taxonomy)
 
     x = np.zeros((len(nodes), node_dim), dtype=np.float32)
     for k, nd in enumerate(nodes):
         if nd.get("kind", "room") == "front_door":
             type_name = "FrontDoor"
         else:
-            type_name = taxonomy.name(int(nd["room_type_id"])) if kind == "fine" else nd["unified_type"]
+            type_name = taxonomy.key(nd)
         x[k, vocab_index.get(type_name, vocab_index.get("other", 0))] = 1.0
         x0, y0, x1, y1 = [float(v) for v in nd["bbox"][:4]]
         base = len(vocab)
@@ -78,7 +90,8 @@ def graph_to_arrays(graph: Dict[str, Any], taxonomy: Taxonomy, kind: str = "fine
             continue
         a = np.zeros(edge_dim, dtype=np.float32)
         a[RELATION_TO_ID[e["relation"]]] = 1.0
-        a[len(RELATIONS) + CONNECTION_TO_ID.get(e.get("connection", "unknown"), CONNECTION_TO_ID["unknown"])] = 1.0
+        if use_connections:
+            a[len(RELATIONS) + CONNECTION_TO_ID.get(e.get("connection", "unknown"), CONNECTION_TO_ID["unknown"])] = 1.0
         g = len(RELATIONS) + len(CONNECTIONS)
         a[g + 0] = float(e.get("dx", 0.0))
         a[g + 1] = float(e.get("dy", 0.0))
