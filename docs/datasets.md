@@ -25,7 +25,8 @@ comes from.
 | Room types | 13 ids (MasterRoom, SecondRoom, ...) | category keys (bedroom, living, ...) | both stored; **unified** types (`room_types.yaml`) used whenever both datasets are mixed (`taxonomy.level: auto`) |
 | Living room | one polygon | several polygons possible | one room with `extra_polygons` (as ResPlan's own `living_0`) |
 | Room geometry | rooms tile the outline, meeting on wall centre lines | rooms separated by real walls, balconies outside `inner` | ResPlan turned into the same partition (`resplan.room_partition`, `src/prism/datasets/resplan_geometry.py`); original polygons kept in `source_polygons` |
-| Walls / doors / windows | not available | available | ResPlan edges labelled door / arch / window / wall; connection features **off** in combined mode |
+| Adjacency (which room pairs are edges) | geometric (`rplan.adjacency_source: geometric`) | **ResPlan's own graph** (`resplan.adjacency_source: source`, Kaggle `plan["graph"]`); geometric fallback for plans without a graph | same graph JSON; `adjacency.source` records what was used |
+| Walls / doors / windows | not available | available | ResPlan edges labelled with ResPlan's edge type (door / wall / window / arch); our geometric label kept as `geometric_connection`; connection features **off** in combined mode |
 | Front door | rows 0-1 of `boundary` | `front_door` polygon | same `front_door` block, FrontDoor node, yellow segment in renders |
 | Adjacency radius | `geometry.wall_dilation_px` | same rule on the partition; door / arch / window labels use the real walls | identical adjacency rule |
 | Split | none → hash of the id | official `split.json` | merged; augmented ResPlan copies skipped by default (`resplan.include_augmented`) |
@@ -38,6 +39,8 @@ give double walls, balconies floating next to the plan and outlines with small
 notches. Phase 02 therefore builds an RPLAN-style **partition**
 (`src/prism/datasets/resplan_geometry.py`):
 
+0. overlapping rooms (a storage or stair polygon inside the living room or the
+   kitchen, ~6% of plans) are made disjoint; the overlap goes to the smaller room;
 1. rooms grow simultaneously into the walls until neighbours meet half-way;
 2. the outline is closed, small unlabelled pockets inside it are given to a
    neighbour (light wells larger than `partition.fill_holes` stay holes and are
@@ -59,8 +62,10 @@ Garden, parking and pool are not rooms of the apartment and are skipped
 1. **Phase 01 (`--dataset resplan`)**: keys flagged as unknown. If they are room
    categories, add them to `configs/room_types.yaml -> resplan`. The units
    section shows whether coordinates are metres.
-2. **Phase 03 (ResPlan)**: walls/doors/windows next to the graph, and edge
-   colours by connection type.
+2. **Phases 02–03 (ResPlan)**: in phase 02, "ResPlan's own graph" (nodes matched
+   by name or geometry, unmatched nodes, `fallback` edges dropped). In phase 03,
+   "Where the edges come from" and the table comparing our geometric labels with
+   ResPlan's edge types.
 3. **Phase 05 (combined)**: the alignment table and charts. If the outline size
    or room-area medians differ a lot between datasets, tune `resplan.fit_ratio`
    and re-run 02–05.

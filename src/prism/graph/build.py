@@ -17,13 +17,15 @@ Graph JSON (``graphs_json/<id>.json``)::
           "source": 0, "target": 1,
           "relation": "left_of", "relation_id": 0,     # source relative to target
           "connection": "wall",                        # wall | door | arch | window | entrance | unknown
+          "geometric_connection": "wall",              # our own label (equal to connection unless the
+                                                       # dataset's label is used: adjacency_source=source)
           "shared_wall_px": 38.0,
           "dx": -0.2, "dy": 0.01, "overlap_x": 0.0, "overlap_y": 0.93,
           "in_geometric": true, "in_source": true
       }, ...],
       "front_door": {"facing": "south", "orientation": "horizontal", "center": [...],
                      "width_px": 12.0, "entrance_room_id": 3, "node_id": 8},
-      "adjacency": {"source": "geometric", "wall_dilation_px": 3, "min_contact_px": 5},
+      "adjacency": {"source": "geometric", "requested": "geometric", "wall_dilation_px": 3, "min_contact_px": 5},
       "comparison_with_source": {"geometric_pairs": 9, "source_pairs": 8, "common_pairs": 7}
     }
 """
@@ -116,6 +118,24 @@ def connection_masks(layout: Dict[str, Any], cfg: Dict[str, Any], masks: RoomMas
     return RoomMasks(shapes, masks.canvas, wall_radius(layout, cfg))
 
 
+def adjacency_source_for(layout: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[str, str]:
+    """Return ``(requested, used)`` adjacency source for one layout.
+
+    ``requested`` comes from the dataset section (``rplan.adjacency_source``,
+    ``resplan.adjacency_source``) or, if absent, ``geometry.adjacency_source``.
+    ``used`` falls back to ``geometric`` when ``source`` is requested but this
+    plan has no source edges (e.g. a ResPlan plan without ``graph``).
+    """
+    section = cfg.get(str(layout.get("dataset", "")), {}) or {}
+    requested = str(section.get("adjacency_source") or cfg["geometry"]["adjacency_source"])
+    if requested == "g2p":
+        requested = "source"
+    used = requested
+    if requested == "source" and not layout.get("source_edges"):
+        used = "geometric"
+    return requested, used
+
+
 def bfs_hops(n: int, undirected_pairs: Iterable[Tuple[int, int]], start: Optional[int]) -> List[int]:
     """Breadth-first hop distance from ``start`` to every node (-1 if unreachable or no start)."""
     hops = [-1] * n
@@ -149,10 +169,10 @@ def build_graph(layout: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
 
     geo = geometric_adjacency(masks, boxes, min_contact_px=int(geo_cfg["min_contact_px"]))
     src = source_pairs(layout)
-    source = geo_cfg["adjacency_source"]
+    requested, source = adjacency_source_for(layout, cfg)
     if source == "geometric":
         pairs = dict(geo)
-    elif source in {"source", "g2p"}:
+    elif source == "source":
         pairs = {p: geo.get(p, 0.0) for p in src}
     elif source == "union":
         pairs = dict(geo)
@@ -161,17 +181,21 @@ def build_graph(layout: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
     else:
         raise ValueError(f"Unknown adjacency_source '{source}'")
 
-    # Connection types: from wall/door/window geometry when the layout has it
-    # (ResPlan), else "wall" (RPLAN). With adjacency_source=source, the dataset's
-    # own edge types are used when available.
+    # Connection types. Our own classification from wall/door/window geometry is
+    # always computed (ResPlan: on the original wall-separated rooms, see
+    # connection_masks; RPLAN gives "wall") and kept on every edge as
+    # "geometric_connection". With adjacency_source=source the dataset's own
+    # label (ResPlan graph) is the edge's "connection".
     hint = (layout.get("geometry_hints") or {}).get("wall_thickness_px", 2 * radius)
     rp = cfg.get("resplan", {})
-    conn = classify_connections(list(pairs), connection_masks(layout, cfg, masks), layout.get("walls"), layout.get("doors"), layout.get("windows"),
-                                float(hint), float(rp.get("open_passage_min_px", 6)), float(rp.get("door_min_px", 4)))
-    if source in {"source", "g2p"}:
+    geo_conn = classify_connections(list(pairs), connection_masks(layout, cfg, masks), layout.get("walls"),
+                                    layout.get("doors"), layout.get("windows"), float(hint),
+                                    float(rp.get("open_passage_min_px", 6)), float(rp.get("door_min_px", 4)))
+    conn = dict(geo_conn)
+    if source in {"source", "union"}:
         for e in layout.get("source_edges", []):
             key = (min(int(e["source"]), int(e["target"])), max(int(e["source"]), int(e["target"])))
-            if e.get("connection") and key in conn:
+            if e.get("connection") and key in conn and (source == "source" or key not in geo):
                 conn[key] = str(e["connection"])
 
     ct, ot = float(geo_cfg["containment_threshold"]), float(geo_cfg["axis_overlap_threshold"])
@@ -179,9 +203,11 @@ def build_graph(layout: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
     for (i, j), shared in sorted(pairs.items()):
         rel = spatial_relation(boxes[i], boxes[j], ct, ot)
         in_geo, in_s = (i, j) in geo, (i, j) in src
-        c = conn.get((i, j), "wall")
-        edges.append(_make_edge(i, j, boxes[i], boxes[j], rel, shared, c, in_geo, in_s, canvas))
-        edges.append(_make_edge(j, i, boxes[j], boxes[i], inverse_relation(rel), shared, c, in_geo, in_s, canvas))
+        c, gc = conn.get((i, j), "wall"), geo_conn.get((i, j), "wall")
+        for e in (_make_edge(i, j, boxes[i], boxes[j], rel, shared, c, in_geo, in_s, canvas),
+                  _make_edge(j, i, boxes[j], boxes[i], inverse_relation(rel), shared, c, in_geo, in_s, canvas)):
+            e["geometric_connection"] = gc      # our label, kept for comparison when the source label is used
+            edges.append(e)
 
     door = layout.get("front_door")
     entrance = door.get("entrance_room_id") if door else None
@@ -229,16 +255,19 @@ def build_graph(layout: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
                 edges.append(_make_edge(entrance, did, boxes[entrance], dbox, inverse_relation(rel), w,
                                         "entrance", False, False, canvas))
 
+    for e in edges:                                   # front-door edges: same label in both fields
+        e.setdefault("geometric_connection", e["connection"])
     return {
         "id": layout["id"],
         "dataset": layout.get("dataset", "rplan"),
         "nodes": nodes,
         "edges": edges,
         "front_door": door_block,
-        "adjacency": {"source": source, "wall_dilation_px": radius,
+        "adjacency": {"source": source, "requested": requested, "wall_dilation_px": radius,
                       "min_contact_px": int(geo_cfg["min_contact_px"])},
         "comparison_with_source": {"geometric_pairs": len(geo), "source_pairs": len(src),
-                                   "common_pairs": len(set(geo) & src)},
+                                   "common_pairs": len(set(geo) & src),
+                                   "source_pairs_without_shared_wall": len(src - set(geo))},
     }
 
 

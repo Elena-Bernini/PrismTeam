@@ -150,6 +150,31 @@ class FakeMultiPolygon:
         self.is_empty = not polys
 
 
+class FakeGraph:
+    """Minimal stand-in for a networkx Graph (``nodes(data=True)``, ``edges(data=True)``)."""
+
+    def __init__(self) -> None:
+        """Start empty."""
+        self._nodes: Dict[str, Dict[str, Any]] = {}
+        self._edges: List[Tuple[str, str, Dict[str, Any]]] = []
+
+    def add_node(self, name: str, **data: Any) -> None:
+        """Add a node with attributes."""
+        self._nodes[name] = data
+
+    def add_edge(self, u: str, v: str, **data: Any) -> None:
+        """Add an edge with attributes."""
+        self._edges.append((u, v, data))
+
+    def nodes(self, data: bool = False):
+        """List nodes (with attributes when ``data``)."""
+        return list(self._nodes.items()) if data else list(self._nodes)
+
+    def edges(self, data: bool = False):
+        """List edges (with attributes when ``data``)."""
+        return list(self._edges) if data else [(u, v) for u, v, _ in self._edges]
+
+
 def _rect(x0: float, y0: float, x1: float, y1: float) -> List[Tuple[float, float]]:
     """Rectangle as a point list."""
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
@@ -223,11 +248,44 @@ def make_resplan_plan(idx: int, rng: random.Random) -> Dict[str, Any]:
     front = FakePolygon(_rect(fx - 0.5, -wd / 2, fx + 0.5, wd / 2)) if ly0 < 0.5 else \
         FakePolygon(_rect(fx - 0.5, H - wd / 2, fx + 0.5, H + wd / 2))
     plan: Dict[str, Any] = {k: (v[0] if len(v) == 1 else FakeMultiPolygon(v)) for k, v in by_cat.items()}
+
+    # Kaggle-like graph: node names <category>_<i> (living merged into living_0), edge "type".
+    graph = FakeGraph()
+    counters: Dict[str, int] = {}
+    node_of: List[str] = []
+    for t, r in zip(types, room_polys):
+        k = counters.get(t, 0)
+        counters[t] = k + 1
+        name = "living_0" if t == "living" else f"{t}_{k}"
+        if idx % 7 == 3 and t == "bathroom" and k == 0:
+            name = "room_without_standard_name"           # exercises matching by geometry
+        if t != "living" or "living_0" not in graph.nodes():
+            graph.add_node(name, type=t, geometry=FakePolygon(_rect(*r)))
+        node_of.append(name)
+    for i in range(len(cells)):
+        for j in range(i + 1, len(cells)):
+            if shared(cells[i], cells[j]) is None:
+                continue
+            pair = {types[i], types[j]}
+            if living in (i, j):
+                other = types[j] if i == living else types[i]
+                kind = "adjacency" if other == "kitchen" else ("via_window" if other == "balcony" else "via_door")
+            else:
+                kind = "adjacency"
+            if pair == {"living"}:
+                continue
+            graph.add_edge(node_of[i], node_of[j], type=kind)
+    if idx % 5 == 0 and len(cells) > 3:                     # a non-physical link, as ResPlan's "fallback"
+        far = max(range(len(cells)), key=lambda k: abs(cells[k][0] - cells[living][0]) + abs(cells[k][1] - cells[living][1]))
+        if shared(cells[living], cells[far]) is None and far != living:
+            graph.add_edge(node_of[living], node_of[far], type="fallback")
+    graph.add_node("front_door_0", type="front_door", geometry=None)
+    graph.add_edge("front_door_0", node_of[living], type="direct")
     if "balcony" in plan:
         plan["balacony"] = plan.pop("balcony")       # ResPlan's own misspelling
     plan.update({"id": 5000 + idx, "unitType": "apartment", "area": round(W * H, 2), "net_area": round(sum(areas), 2),
                  "wall_depth": wd, "wall": wall, "door": FakeMultiPolygon(doors), "window": FakeMultiPolygon(windows),
-                 "front_door": front, "inner": FakePolygon(_rect(0, 0, W, H))})
+                 "front_door": front, "inner": FakePolygon(_rect(0, 0, W, H)), "graph": graph})
     return plan
 
 

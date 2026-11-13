@@ -17,6 +17,8 @@ What
 :func:`partition_rooms` turns the wall-separated rooms into an RPLAN-style
 partition, in the original ResPlan coordinates:
 
+0. **overlaps** - ResPlan rooms can overlap (a storage or stair polygon inside the
+   living room); the overlap is given to the smaller room;
 1. **simultaneous growth** - every room grows into the surrounding walls in
    ``steps`` small increments up to ``growth x wall_depth``; at each step a room
    only takes territory nobody owns yet, so neighbours meet half-way across the
@@ -209,12 +211,13 @@ def _snap_axes(cells: List[Any], footprint: Any, tol: float) -> List[Any]:
         return out
 
     snapped = [_clean(shapely.transform(c, snap)) for c in cells]
-    resolved: List[Any] = []
+    # Overlaps created by the snap go to the SMALLER room, so a closet cannot be eaten by its neighbour.
+    resolved: List[Any] = list(snapped)
     owned = None
-    for c in snapped:
-        piece = c if owned is None else _clean(c.difference(owned))
-        resolved.append(piece)
-        owned = piece if owned is None else owned.union(piece)
+    for i in sorted(range(len(snapped)), key=lambda i: snapped[i].area):
+        piece = snapped[i] if owned is None else _clean(snapped[i].difference(owned))
+        resolved[i] = piece if not piece.is_empty else snapped[i]
+        owned = resolved[i] if owned is None else owned.union(resolved[i])
     new_footprint = _clean(shapely.transform(footprint, snap))
     return _assign_leftovers(resolved, unary_union([new_footprint, unary_union(resolved)]))
 
@@ -233,7 +236,17 @@ def partition_rooms(rooms: Sequence[Any], wall_depth: float, growth: float = 0.5
     from shapely.ops import unary_union
 
     wd = max(float(wall_depth), 1e-6)
+    # 0) ResPlan rooms may overlap: storage / stair polygons often lie INSIDE the living
+    #    room or the kitchen (~6% of plans). The overlap goes to the smaller room (the
+    #    closet stays a closet, the living room gets a hole around it).
     src = [_clean(r) for r in rooms]
+    taken = None
+    for i in sorted(range(len(src)), key=lambda i: src[i].area):
+        if taken is not None:
+            rest = _clean(src[i].difference(taken))
+            if not rest.is_empty:
+                src[i] = rest
+        taken = src[i] if taken is None else taken.union(src[i])
     cells = list(src)
 
     # 1) simultaneous growth: neighbours meet half-way across each wall.

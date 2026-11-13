@@ -35,6 +35,13 @@ Alignment with RPLAN (so both datasets can share one gallery):
 - the wall thickness in canvas pixels is stored in ``geometry_hints`` and used
   by phase 03 instead of the global dilation radius;
 - ``front_door`` is collapsed into a segment exactly like the RPLAN door.
+
+ResPlan's own graph (``plan["graph"]`` in the Kaggle release) is read by
+:func:`read_resplan_graph` into ``source_edges``. With
+``resplan.adjacency_source: source`` (default) phase 03 uses those edges and
+their types (``via_door`` -> door, ``adjacency`` -> wall, ``via_window`` ->
+window, ``via_opening`` -> arch); its front-door edge also decides the entrance
+room. Plans without a graph fall back to our geometric adjacency.
 """
 
 from __future__ import annotations
@@ -47,6 +54,7 @@ import numpy as np
 
 from prism.datasets.schema import SCHEMA_VERSION, Taxonomy, make_id
 from prism.geometry.front_door import describe_front_door, segment_from_door_polygon
+from prism.geometry.polygon import point_in_polygon, room_shapes, segment_polygon_distance
 from prism.geometry.polygon import polygon_area
 
 # ResPlan graph edge types -> our connection types.
@@ -334,10 +342,27 @@ def convert_plan(plan: Dict[str, Any], index: int, taxonomy: Taxonomy, cfg: Dict
         min_width_px=float(cfg["front_door"]["min_width_px"]),
         source="resplan_front_door_polygon",
     )
+    # ResPlan's own graph: Kaggle plan["graph"], or the strict graph from resplan_utils on request.
+    graph = plan.get("graph")
+    graph_origin = "plan['graph']" if graph is not None else None
+    if rcfg.get("graph_from_utils") and (graph is None or rcfg.get("graph_from_utils") == "always"):
+        from prism.common.config import resolve_path
+        graph = graph_with_resplan_utils(plan, resolve_path(cfg["paths"]["data_root"]) / str(rcfg["utils_dir"]))
+        graph_origin = "resplan_utils.plan_to_graph"
+    source_edges, door_rooms, graph_info = read_resplan_graph(graph, rooms, tr, bool(rcfg.get("keep_fallback_edges")))
+    graph_info["origin"] = graph_origin
+
+    # Entrance room: ResPlan's front-door ("direct") edge when available, else the closest room.
+    if front_door is not None:
+        front_door["entrance_source"] = "closest_room"
+        if door_rooms:
+            closest = front_door["entrance_room_id"]
+            pick = closest if closest in door_rooms else min(
+                door_rooms, key=lambda rid: segment_polygon_distance(segment[0], segment[1], rooms[rid]["polygon"]))
+            front_door["entrance_room_id"] = int(pick)
+            front_door["entrance_source"] = "resplan_graph"
     if front_door and front_door["entrance_room_id"] is not None:
         rooms[front_door["entrance_room_id"]]["is_entrance_room"] = True
-
-    source_edges = resplan_graph_edges(plan.get("graph"), {r["source_key"]: r["id"] for r in rooms})
 
     meta = {k: plan.get(k) for k in ("unitType", "area", "net_area", "wall_depth") if k in plan}
     return {
@@ -357,27 +382,128 @@ def convert_plan(plan: Dict[str, Any], index: int, taxonomy: Taxonomy, cfg: Dict
         "windows": windows,
         "geometry_hints": hints,
         "source_edges": source_edges,
+        "source_graph_info": graph_info,
         "source": {"dataset": "ResPlan", "index_in_pickle": index},
         "raw": {k: (float(v) if isinstance(v, (int, float, np.floating)) else str(v)) for k, v in meta.items()},
     }
 
 
-def resplan_graph_edges(graph: Any, key_to_room: Dict[str, int]) -> List[Dict[str, Any]]:
-    """Edges of ResPlan's own graph (Kaggle release) mapped to our room ids.
+EDGE_TYPE_KEYS = ("type", "edge_type", "kind", "label", "connection")
+# When ResPlan's graph lists the same room pair twice, keep the most specific type.
+EDGE_TYPE_PRIORITY = {"via_door": 0, "via_opening": 1, "via_window": 2, "adjacency": 3, "fallback": 4}
 
-    Node names follow ``<category>_<i>`` (``living_0``, ``bedroom_1`` ...); edges
-    to front-door nodes are skipped (we build our own FrontDoor node).
+
+def edge_type_of(data: Any) -> str:
+    """Edge type stored in a ResPlan graph edge (the attribute name is checked among common keys)."""
+    for key in EDGE_TYPE_KEYS:
+        value = (data or {}).get(key) if isinstance(data, dict) else None
+        if isinstance(value, str) and value:
+            return value
+    return "unknown"
+
+
+def is_front_door_node(node: Any, data: Any) -> bool:
+    """True for ResPlan's front-door nodes (``front_door_<i>`` or ``type == "front_door"``)."""
+    return str(node).startswith("front_door") or (isinstance(data, dict) and data.get("type") == "front_door")
+
+
+def node_to_room(node: Any, data: Any, key_to_room: Dict[str, int], rooms: List[Dict[str, Any]],
+                 tr: "CanvasTransform") -> Tuple[Optional[int], str]:
+    """Match a ResPlan graph node to one of our rooms.
+
+    First by name (``living_0``, ``bedroom_1`` ... = our ``source_key``), then by
+    geometry: the centre of the node's ``geometry`` attribute, mapped into the
+    canvas, must fall inside one of our room polygons. Returns
+    ``(room_id or None, "name" | "geometry" | "unmatched")``.
     """
-    if graph is None or not hasattr(graph, "edges"):
-        return []
-    out = []
-    for u, v, data in graph.edges(data=True):
-        if str(u) not in key_to_room or str(v) not in key_to_room:
+    name = str(node)
+    if name in key_to_room:
+        return key_to_room[name], "name"
+    pts = geometry_points(data.get("geometry")) if isinstance(data, dict) else []
+    if pts:
+        cx, cy = np.asarray(pts, dtype=np.float64).mean(axis=0)
+        (px, py), = tr([[cx, cy]])
+        for room in rooms:
+            if any(point_in_polygon((px, py), poly) for poly in room_shapes(room)):
+                return int(room["id"]), "geometry"
+    return None, "unmatched"
+
+
+def read_resplan_graph(graph: Any, rooms: List[Dict[str, Any]], tr: "CanvasTransform",
+                       keep_fallback: bool = False) -> Tuple[List[Dict[str, Any]], List[int], Dict[str, Any]]:
+    """Read ResPlan's own graph (Kaggle ``plan["graph"]`` or ``resplan_utils.plan_to_graph``).
+
+    Returns ``(source_edges, front_door_rooms, info)``:
+
+    - ``source_edges``: room-room edges mapped to our room ids, one per pair, with
+      ``source_type`` (ResPlan's label) and ``connection`` (our label, see
+      ``RESPLAN_EDGE_TO_CONNECTION``). ``fallback`` edges (links ResPlan adds to
+      connect otherwise disconnected parts, without a shared wall) are dropped
+      unless ``keep_fallback``;
+    - ``front_door_rooms``: rooms linked to a front-door node (ResPlan ``direct`` edges);
+    - ``info``: counters for the reports (how nodes were matched, what was dropped).
+    """
+    info = {"has_graph": False, "nodes": 0, "matched_by_name": 0, "matched_by_geometry": 0, "unmatched_nodes": 0,
+            "edges": 0, "room_edges_kept": 0, "fallback_dropped": 0, "unmatched_edges": 0, "front_door_edges": 0}
+    if graph is None or not hasattr(graph, "edges") or not hasattr(graph, "nodes"):
+        return [], [], info
+    info["has_graph"] = True
+    key_to_room = {r["source_key"]: int(r["id"]) for r in rooms}
+    node_room: Dict[Any, Optional[int]] = {}
+    door_nodes = set()
+    for node, data in graph.nodes(data=True):
+        info["nodes"] += 1
+        if is_front_door_node(node, data):
+            door_nodes.add(node)
             continue
-        kind = str((data or {}).get("type", (data or {}).get("edge_type", "unknown")))
-        out.append({"source": key_to_room[str(u)], "target": key_to_room[str(v)], "raw_value": -1,
-                    "source_type": kind, "connection": RESPLAN_EDGE_TO_CONNECTION.get(kind, "unknown")})
-    return out
+        rid, how = node_to_room(node, data, key_to_room, rooms, tr)
+        node_room[node] = rid
+        info["matched_by_name" if how == "name" else "matched_by_geometry" if how == "geometry" else "unmatched_nodes"] += 1
+
+    best: Dict[Tuple[int, int], Dict[str, Any]] = {}
+    front_door_rooms: List[int] = []
+    for u, v, data in graph.edges(data=True):
+        info["edges"] += 1
+        kind = edge_type_of(data)
+        if u in door_nodes or v in door_nodes:
+            other = v if u in door_nodes else u
+            if node_room.get(other) is not None:
+                front_door_rooms.append(int(node_room[other]))
+                info["front_door_edges"] += 1
+            continue
+        ru, rv = node_room.get(u), node_room.get(v)
+        if ru is None or rv is None or ru == rv:
+            info["unmatched_edges"] += 1
+            continue
+        if kind == "fallback" and not keep_fallback:
+            info["fallback_dropped"] += 1
+            continue
+        key = (min(ru, rv), max(ru, rv))
+        prev = best.get(key)
+        if prev is None or EDGE_TYPE_PRIORITY.get(kind, 9) < EDGE_TYPE_PRIORITY.get(prev["source_type"], 9):
+            best[key] = {"source": key[0], "target": key[1], "raw_value": -1, "source_type": kind,
+                         "connection": RESPLAN_EDGE_TO_CONNECTION.get(kind, "unknown")}
+    edges = [best[k] for k in sorted(best)]
+    info["room_edges_kept"] = len(edges)
+    return edges, sorted(set(front_door_rooms)), info
+
+
+def graph_with_resplan_utils(plan: Dict[str, Any], utils_dir: Path) -> Any:
+    """Build ResPlan's STRICT graph with the authors' ``resplan_utils.plan_to_graph``.
+
+    Used only when ``resplan.graph_from_utils`` is true and the plan has no
+    ``graph`` (GitHub release), or to get ``via_opening`` (open passages), which
+    the Kaggle benchmark graph merges into ``adjacency``. ``resplan_utils.py``
+    must be in ``utils_dir`` (it ships with the dataset repository).
+    """
+    import importlib
+    import sys
+
+    if not (utils_dir / "resplan_utils.py").exists():
+        raise FileNotFoundError(f"resplan_utils.py not found in {utils_dir} (copy it from the ResPlan repository).")
+    if str(utils_dir) not in sys.path:
+        sys.path.insert(0, str(utils_dir))
+    return importlib.import_module("resplan_utils").plan_to_graph(plan)
 
 
 def iter_selected_plans(plans: List[Dict[str, Any]], splits: Optional[Dict[str, List[str]]],

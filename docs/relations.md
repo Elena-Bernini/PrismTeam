@@ -97,17 +97,34 @@ How it is represented everywhere:
 
 - **RPLAN** has no wall or door geometry in the Graph2Plan pickle, so every
   room-room edge is `wall` (adjacent across a wall, door unknown).
-- **ResPlan** keeps its walls, doors and windows. For each adjacent pair, phase
-  03 looks at the strip between the two rooms (where the shared wall should be):
+- **ResPlan** (Kaggle release) ships its own graph, `plan["graph"]`, built by
+  the dataset authors. **It is the default source of ResPlan edges**
+  (`resplan.adjacency_source: source`):
+  - room pairs = the edges of their graph. Nodes are matched to our rooms by
+    name (`living_0`, `bedroom_1` …), or by node geometry when the name differs;
+  - connection = their edge type mapped to ours: `via_door` → `door`,
+    `adjacency` → `wall`, `via_window` → `window`, `via_opening` → `arch`;
+  - `fallback` edges (links they add to connect parts of a plan with no shared
+    wall) are dropped (`resplan.keep_fallback_edges: false`);
+  - the entrance room is the room their front-door (`direct`) edge points to.
+
+  Our own geometric labels are still computed on every edge
+  (`geometric_connection`), and phase 03 shows a table comparing them with
+  ResPlan's. Our labels come from the strip between two rooms, measured on the
+  original wall-separated room polygons (`source_polygons`):
   - a door polygon covering at least `resplan.door_min_px` of the shared wall
     (door pixels in the strip / wall thickness) → `door`;
-  - a stretch of at least `resplan.open_passage_min_px` without wall, or rooms
-    touching directly where no wall is drawn → `arch` (open passage);
-  - a window polygon there (e.g. room → balcony) → `window`;
-  - otherwise → `wall`.
-  If the plan comes with ResPlan's own graph (Kaggle release), the phase-03
-  report compares these labels with ResPlan's edge types (`via_door`,
-  `adjacency`, `via_window`, `via_opening`).
+  - at least `resplan.open_passage_min_px` without wall, or rooms touching
+    directly where no wall is drawn → `arch`;
+  - a window there → `window`;
+  - otherwise `wall`.
+
+  A plan without a graph (GitHub release) falls back to our geometric adjacency
+  and labels. With `resplan.graph_from_utils: true`, the authors'
+  `resplan_utils.plan_to_graph` builds the missing graphs instead. With
+  `always`, it also replaces the Kaggle graph with their *strict* graph, which
+  keeps `via_opening`: the Kaggle benchmark graph merges open passages into
+  `adjacency`.
 - `entrance` = the edge between the FrontDoor node and the entrance room.
 
 Because RPLAN can only ever say `wall`, connection types are **switched off as
@@ -119,8 +136,10 @@ in the graph JSON and are used normally for ResPlan-only runs.
 ## Adjacency radius for ResPlan
 
 ResPlan layouts are converted into an RPLAN-style partition (rooms meet on the
-wall centre lines, see `docs/datasets.md`), so adjacency uses the same rule and
-radius as RPLAN (`geometry.wall_dilation_px`).
+wall centre lines, see `docs/datasets.md`), so geometric adjacency uses the same
+rule and radius as RPLAN (`geometry.wall_dilation_px`). For ResPlan this
+geometric adjacency is the fallback (plans without a graph) and the check shown
+in phase 03; by default the room pairs come from ResPlan's own graph.
 
 Connection types instead need the real walls: they are computed on the original
 room polygons (`source_polygons`) with a radius of `ceil(thickness / 2) + 1`,

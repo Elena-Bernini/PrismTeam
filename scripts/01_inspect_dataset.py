@@ -78,8 +78,8 @@ def door_vs_snapshot(sample, snapshot_path):
 
 def inspect_resplan(cfg, ws, out):
     """ResPlan inspection: keys, geometry types, units, wall depth, front door, split, own graph."""
-    from prism.datasets.resplan import (geometry_points, iter_polygons, load_resplan_pickle, load_resplan_splits,
-                                        plan_source_id, room_categories, unknown_keys)
+    from prism.datasets.resplan import (edge_type_of, geometry_points, iter_polygons, load_resplan_pickle,
+                                        load_resplan_splits, plan_source_id, room_categories, unknown_keys)
 
     taxonomy = Taxonomy(cfg, "resplan")
     plans = load_resplan_pickle(ws.raw_path("resplan.pkl"))
@@ -89,6 +89,7 @@ def inspect_resplan(cfg, ws, out):
 
     key_counts, geom_types, unknown, rooms_per_cat = Counter(), {}, Counter(), Counter()
     wall_depths, spans, fd_parts, graph_edge_types = [], [], Counter(), Counter()
+    graph_node_types, graph_node_names = Counter(), Counter()
     for p in subset:
         key_counts.update(p.keys())
         for k, v in p.items():
@@ -105,7 +106,9 @@ def inspect_resplan(cfg, ws, out):
         fd_parts[len(iter_polygons(p.get("front_door")))] += 1
         g = p.get("graph")
         if g is not None and hasattr(g, "edges"):
-            graph_edge_types.update(str((d or {}).get("type", "?")) for _, _, d in g.edges(data=True))
+            graph_edge_types.update(edge_type_of(d) for _, _, d in g.edges(data=True))
+            graph_node_types.update(str((d or {}).get("type", str(n).rsplit("_", 1)[0])) for n, d in g.nodes(data=True))
+            graph_node_names.update(str(n) for n, _ in list(g.nodes(data=True))[:3])
 
     ids = [plan_source_id(p, i) for i, p in enumerate(plans)]
     split_info = None
@@ -120,6 +123,7 @@ def inspect_resplan(cfg, ws, out):
              "inner_longest_side": {"min": float(np.min(spans)), "median": float(np.median(spans)),
                                     "max": float(np.max(spans))},
              "front_door_parts": dict(fd_parts), "own_graph_edge_types": dict(graph_edge_types),
+             "own_graph_node_types": dict(graph_node_types),
              "split_json": split_info}
     write_json(out / "inspection_stats.json", stats)
 
@@ -146,8 +150,14 @@ def inspect_resplan(cfg, ws, out):
         rep.heading("split.json")
         rep.table([{"split": k, **v} for k, v in split_info.items()])
     if graph_edge_types:
-        rep.heading("Edge types of ResPlan's own graph")
-        rep.table([{"type": k, "edges": v} for k, v in graph_edge_types.most_common()])
+        rep.heading("ResPlan's own graph")
+        rep.text("Edge types should be via_door / adjacency / via_window / direct (+ via_opening / fallback). "
+                 "'unknown' means the edge attribute name differs from the expected ones "
+                 "(EDGE_TYPE_KEYS in src/prism/datasets/resplan.py). Node names should look like living_0, "
+                 "bedroom_1, front_door_0.")
+        rep.table([{"edge type": k, "edges": v} for k, v in graph_edge_types.most_common()])
+        rep.table([{"node type": k, "nodes": v} for k, v in graph_node_types.most_common()])
+        rep.text("Example node names: " + ", ".join(list(graph_node_names)[:12]))
 
     colors = {"living": "#e8e8e8", "bedroom": "#f6d77a", "kitchen": "#f19e9e", "bathroom": "#8cc7ec",
               "balcony": "#9bd17a", "storage": "#c9ad94", "stair": "#8d8d8d"}

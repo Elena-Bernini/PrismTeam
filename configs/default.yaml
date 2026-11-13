@@ -47,6 +47,7 @@ rplan:
   snapshot_dir: raw/rplan/Interface/static/Data/snapshot_train
   img_dir: raw/rplan/Interface/static/Data/Img
   canvas: 256             # Graph2Plan coordinates live in a 256x256 canvas
+  adjacency_source: geometric   # Graph2Plan's edge list is unreliable (see docs/relations.md)
 
 resplan:
   # Files from https://github.com/m-agour/ResPlan (unzip ResPlan.zip) or the Kaggle release.
@@ -73,12 +74,20 @@ resplan:
   open_passage_min_px: 6  # an un-walled shared boundary at least this long = "arch" (open passage)
   door_min_px: 4          # a door polygon covering at least this length of the shared wall = "door"
                           # (tuned on the real ResPlan.pkl against its own via_door / adjacency edge types)
+  adjacency_source: source       # source = ResPlan's own graph (Kaggle plan["graph"]): its room pairs and edge
+                                 # types; plans without a graph fall back to geometric. geometric | source | union
+  keep_fallback_edges: false     # ResPlan "fallback" edges link disconnected parts without a shared wall
+  graph_from_utils: false        # false | true | always. true: build missing graphs with the authors'
+                                 # resplan_utils.plan_to_graph (strict graph, keeps via_opening = open
+                                 # passages); always: also replace the Kaggle graph with the strict one
+  utils_dir: raw/resplan         # folder (relative to data_root) that contains resplan_utils.py
 
 # -----------------------------------------------------------------------------
 # Phase 03 - adjacency and spatial relations (see docs/relations.md)
 # -----------------------------------------------------------------------------
 geometry:
-  adjacency_source: geometric   # geometric | source | union   (source = edges shipped with the dataset:
+  adjacency_source: geometric   # default when a dataset section (rplan / resplan) sets none.
+                                # geometric | source | union   (source = edges shipped with the dataset:
                                 #  Graph2Plan edge list for RPLAN, plan["graph"] for ResPlan/Kaggle)
                                 # ResPlan layouts carry their own wall thickness; it overrides
                                 # wall_dilation_px for those plans.

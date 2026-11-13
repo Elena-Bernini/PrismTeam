@@ -9,7 +9,8 @@ render WITH it, next to RPLAN renders for reference, and measures:
 - ``gap share``: share of the building interior left grey in the render (double
   walls, holes between rooms). RPLAN is the reference (~0);
 - ``detached parts``: connected pieces of the plan in the render (1 = one building);
-- ``rooms outside canvas``, partition overlap and conversion time.
+- ``rooms outside canvas``, ``rooms lost`` (a room present before the partition
+  but missing after it), partition overlap and conversion time.
 
 It reads ``ResPlan.pkl`` directly and writes nothing under ``data/processed``.
 
@@ -135,6 +136,7 @@ def main():
             m = render_metrics(img, rcfg)
             row[f"{name}_gap_share"] = m["gap_share"]
             row[f"{name}_parts"] = m["detached_parts"]
+            row[f"{name}_rooms"] = len(layout["rooms"])
             row[f"{name}_outside"] = sum(1 for r in layout["rooms"]
                                          if any(not (-1 <= v <= 257) for pt in r["polygon"] for v in pt))
             if name == "after":
@@ -159,6 +161,7 @@ def main():
         "plans_with_detached_parts_before": sum(1 for r in rows if r.get("before_parts", 1) > 1),
         "plans_with_detached_parts_after": sum(1 for r in rows if r.get("after_parts", 1) > 1),
         "rooms_outside_canvas_after": int(sum(r.get("after_outside", 0) for r in rows)),
+        "rooms_lost_by_partition": int(sum(max(0, r.get("before_rooms", 0) - r.get("after_rooms", 0)) for r in rows)),
         "overlap_ratio_max": agg("overlap_ratio", np.max),
         "ms_per_plan_after": agg("after_ms"),
     }
@@ -183,7 +186,8 @@ def main():
               "RPLAN gap share": summary.get("rplan_reference_gap_share_mean", "n/a"),
               "detached plans before": summary["plans_with_detached_parts_before"],
               "detached plans after": summary["plans_with_detached_parts_after"],
-              "failures after": summary["failures_after"], "ms / plan": summary["ms_per_plan_after"]})
+              "failures after": summary["failures_after"], "rooms lost": summary["rooms_lost_by_partition"],
+              "ms / plan": summary["ms_per_plan_after"]})
     rep.text("gap share = grey pixels inside the building (double walls, holes between rooms) / building pixels. "
              "detached = plans whose render has more than one separate piece (e.g. a floating balcony).")
     if rplan_imgs:

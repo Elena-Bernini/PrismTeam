@@ -168,3 +168,52 @@ def test_resplan_partition_tiles_the_outline():
         assert abs(unary_union(rooms).area / outline.area - 1) < 0.01       # rooms cover the outline
         assert sum(r.area for r in rooms) / unary_union(rooms).area < 1.01  # and do not overlap
         assert all(r.get("source_polygons") for r in layout["rooms"])     # originals kept for the labels
+
+
+def test_resplan_graph_is_the_adjacency_source():
+    """ResPlan's own graph drives adjacency and connection types; fallback edges are dropped."""
+    import random
+
+    from prism.datasets.resplan import convert_plan, normalize_keys
+    from prism.datasets.schema import Taxonomy
+    from prism.datasets.synthetic import make_resplan_plan
+    from prism.graph.build import build_graph
+
+    cfg = load_config("local")
+    tax = Taxonomy(cfg, "resplan")
+    plan = normalize_keys(make_resplan_plan(0, random.Random(5)))     # idx 0 -> has a fallback edge
+    layout = convert_plan(plan, 0, tax, cfg)
+    info = layout["source_graph_info"]
+    assert info["has_graph"] and info["unmatched_nodes"] == 0 and info["front_door_edges"] == 1
+    assert all(e["source_type"] != "fallback" for e in layout["source_edges"])
+    assert layout["front_door"]["entrance_source"] == "resplan_graph"
+    graph = build_graph(layout, cfg)
+    assert graph["adjacency"]["source"] == "source"
+    src_pairs = {(e["source"], e["target"]) for e in layout["source_edges"]}
+    room_pairs = {(e["source"], e["target"]) for e in graph["edges"]
+                  if e["connection"] != "entrance" and e["source"] < e["target"]}
+    assert room_pairs == src_pairs
+    assert all("geometric_connection" in e for e in graph["edges"])
+    # Without a graph the same plan falls back to geometric adjacency.
+    plan.pop("graph")
+    layout2 = convert_plan(plan, 0, tax, cfg)
+    assert build_graph(layout2, cfg)["adjacency"]["source"] == "geometric"
+    assert layout2["front_door"]["entrance_source"] == "closest_room"
+
+
+def test_resplan_node_matched_by_geometry():
+    """A graph node with a non-standard name is matched to a room through its geometry."""
+    import random
+
+    from prism.datasets.resplan import convert_plan, normalize_keys
+    from prism.datasets.schema import Taxonomy
+    from prism.datasets.synthetic import make_resplan_plan
+
+    cfg = load_config("local")
+    for idx in range(3, 60, 7):                                       # idx % 7 == 3 renames a bathroom node
+        plan = normalize_keys(make_resplan_plan(idx, random.Random(idx)))
+        if "room_without_standard_name" in plan["graph"].nodes():
+            info = convert_plan(plan, idx, Taxonomy(cfg, "resplan"), cfg)["source_graph_info"]
+            assert info["matched_by_geometry"] == 1 and info["unmatched_nodes"] == 0
+            return
+    raise AssertionError("no synthetic plan with a renamed node")

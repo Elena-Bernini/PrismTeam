@@ -108,6 +108,7 @@ def run(cfg, ws):
                                    if fd.get("entrance_room_id") is not None else None),
             "polygon_alignment": (l.get("raw") or {}).get("polygon_alignment", {}).get("method"),
             "wall_thickness_px": (l.get("geometry_hints") or {}).get("wall_thickness_px"),
+            "entrance_source": (l.get("front_door") or {}).get("entrance_source"),
         })
     write_json(ws.metadata_dir / "layouts_metadata.json", metadata)
     write_json(ws.metadata_dir / "ids.json", [m["id"] for m in metadata], indent=None)
@@ -144,6 +145,24 @@ def run(cfg, ws):
                       "max": float(np.max(walls))})
         rep.table([{"fine type": k, "rooms": v} for k, v in
                    Counter(r["room_type_name"] for l in layouts for r in l["rooms"]).most_common()])
+        gi = Counter()
+        for l in layouts:
+            for k, v in (l.get("source_graph_info") or {}).items():
+                if isinstance(v, (bool, int)):
+                    gi[k] += int(v)
+        rep.heading("ResPlan's own graph")
+        rep.text("How the nodes of plan['graph'] were matched to our rooms (by name living_0 / bedroom_1 ..., else "
+                 "by the position of the node geometry). Unmatched nodes or edges mean the naming differs from the "
+                 "one expected: check src/prism/datasets/resplan.py (node_to_room, edge_type_of).")
+        rep.kpis({"plans with a graph": gi["has_graph"], "nodes matched by name": gi["matched_by_name"],
+                  "matched by geometry": gi["matched_by_geometry"], "unmatched nodes": gi["unmatched_nodes"],
+                  "room edges kept": gi["room_edges_kept"], "fallback edges dropped": gi["fallback_dropped"],
+                  "unmatched edges": gi["unmatched_edges"], "front-door edges": gi["front_door_edges"]})
+        if gi["has_graph"] == 0:
+            rep.note("No plan has a graph (GitHub release). Phase 03 will use geometric adjacency, or set "
+                     "resplan.graph_from_utils=true to build ResPlan's strict graph with resplan_utils.py.", warn=True)
+        elif gi["unmatched_nodes"] or gi["unmatched_edges"]:
+            rep.note("Some graph nodes / edges could not be matched to rooms - see the counters above.", warn=True)
 
     title = ("Examples: snapshot (left) vs layout JSON (right)" if ws.dataset == "rplan"
              else "Examples: walls / doors / windows kept from ResPlan (left) vs layout JSON (right)")

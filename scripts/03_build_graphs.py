@@ -80,6 +80,7 @@ def run(cfg, ws):
 
     rel_counts, conn_counts, deg, radii = Counter(), Counter(), [], []
     conn_vs_source = defaultdict(Counter)
+    used_sources, entrance_sources = Counter(), Counter()
     raw_vs_ours = defaultdict(Counter)
     totals = Counter()
     ct, ot = float(cfg["geometry"]["containment_threshold"]), float(cfg["geometry"]["axis_overlap_threshold"])
@@ -96,8 +97,13 @@ def run(cfg, ws):
             for k, v in graph["comparison_with_source"].items():
                 totals[k] += v
             radii.append(dilation_radius(layout, cfg))
-            ours = {(min(e["source"], e["target"]), max(e["source"], e["target"])): e["connection"]
+            # Our own geometric label (also when the edge's connection comes from the source graph).
+            ours = {(min(e["source"], e["target"]), max(e["source"], e["target"])):
+                    e.get("geometric_connection", e["connection"])
                     for e in graph["edges"] if e["connection"] != "entrance"}
+            used_sources[graph["adjacency"]["source"]] += 1
+            fd = layout.get("front_door") or {}
+            entrance_sources[fd.get("entrance_source", "closest_room") if fd else "no front door"] += 1
             # Our relation for each source (u, v, raw) triple, in the same direction u -> v (RPLAN only),
             # and our connection type vs the source edge type (ResPlan graph, when present).
             rooms = layout["rooms"]
@@ -115,6 +121,7 @@ def run(cfg, ws):
     stats = {"graphs": len(ids), "relation_counts_directed": dict(rel_counts), "connection_counts_directed": dict(conn_counts),
              "adjacency_vs_source": {"source": src_name, "precision": prec, "recall": rec, **totals},
              "connection_vs_source_type": {k: dict(v) for k, v in conn_vs_source.items()},
+             "adjacency_source_used": dict(used_sources), "entrance_source": dict(entrance_sources),
              "raw_column_vs_our_relation": {str(k): dict(v) for k, v in sorted(raw_vs_ours.items())}}
     write_json(ws.metadata_dir / "graph_statistics.json", stats)
 
@@ -122,8 +129,19 @@ def run(cfg, ws):
     kp = {"graphs": len(ids), "mean degree": float(np.mean(deg)), "front-door edges": conn_counts.get("entrance", 0) // 2,
           "dilation radius px": f"{min(radii)}-{max(radii)}" if min(radii) != max(radii) else str(radii[0])}
     if has_source:
-        kp.update({f"adjacency precision vs {src_name}": prec, f"adjacency recall vs {src_name}": rec})
+        kp.update({f"geometric vs {src_name}: precision": prec, f"geometric vs {src_name}: recall": rec,
+                   f"{src_name} pairs without a shared wall": totals["source_pairs_without_shared_wall"]})
     rep.kpis(kp)
+    rep.heading("Where the edges come from")
+    rep.text("adjacency source = which room pairs became edges in each graph. 'source' = the dataset's own graph "
+             "(ResPlan plan['graph']); 'geometric' = our shared-wall detection (always used for RPLAN, and for "
+             "ResPlan plans without a graph). Set per dataset with rplan.adjacency_source / resplan.adjacency_source.")
+    rep.table([{"adjacency source used": k, "graphs": v} for k, v in used_sources.most_common()])
+    rep.table([{"entrance room from": k, "plans": v} for k, v in entrance_sources.most_common()])
+    if has_source and totals["source_pairs_without_shared_wall"]:
+        rep.note(f"{totals['source_pairs_without_shared_wall']} room pairs of the {src_name} have no shared wall in "
+                 "the geometry (e.g. links through a door polygon only, or residual fallback links). They are kept "
+                 "as edges with shared_wall_px = 0 when the source graph is used.", warn=False)
     if not has_source:
         rep.note("No source edge list in this dataset (ResPlan GitHub release has no plan['graph']; the Kaggle "
                  "release has one), so adjacency cannot be compared with a reference here.")
@@ -135,13 +153,18 @@ def run(cfg, ws):
     rep.heading("Relation distribution (directed edges, both directions)")
     rep.table([{"relation": r, "edges": rel_counts.get(r, 0)} for r in RELATIONS])
     rep.heading("Connection types (directed edges)")
-    rep.text("wall / door / arch (open passage) / window come from the wall, door and window geometry (ResPlan). "
-             "RPLAN has no such geometry, so its room edges are all 'wall'. entrance = edges to the FrontDoor node.")
+    rep.text("The label each edge uses. ResPlan with adjacency source 'source': ResPlan's own edge type (via_door -> "
+             "door, adjacency -> wall, via_window -> window, via_opening -> arch). Otherwise: our classification "
+             "from the wall, door and window geometry. RPLAN has no such geometry, so its room edges are all "
+             "'wall'. entrance = edges to the FrontDoor node.")
     rep.table([{"connection": k, "edges": v} for k, v in conn_counts.most_common()])
     if conn_vs_source:
-        rep.heading("Our connection type vs ResPlan's own edge type")
+        rep.heading("Our geometric connection type vs ResPlan's own edge type")
         rep.text("Rows: edge type in plan['graph'] (via_door, adjacency, via_window, via_opening ...). Columns: our "
-                 "label for the same room pair. A diagonal-like table means the geometric classification agrees.")
+                 "geometric label for the same room pair (kept as geometric_connection on every edge). Expected: "
+                 "via_door -> door, via_window -> window, adjacency -> wall or arch (the Kaggle benchmark graph "
+                 "merges open passages into adjacency). Large off-diagonal counts point to a mapping or "
+                 "threshold problem (resplan.open_passage_min_px).")
         rep.table([{"ResPlan type": k, **dict(v)} for k, v in conn_vs_source.items()])
 
     if raw_vs_ours:
