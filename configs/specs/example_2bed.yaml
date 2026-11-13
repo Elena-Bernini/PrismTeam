@@ -1,0 +1,39 @@
+# Example request for phase 13 (scripts/13_constraint_search.py): a two-bedroom flat.
+# Room types are unified types (bedroom, bathroom, kitchen, living, dining, study, balcony,
+# entrance, storage, stair, other). Shorthands: 2 = exactly 2, "2+" = at least 2,
+# "2-3" = between 2 and 3, "<=1" = at most 1, 0 = must not be present.
+name: two_bed_flat            # used as the output folder name
+k: 10
+datasets: [rplan, resplan]    # optional: restrict the gallery (default: every dataset of the workspace)
+split: all                    # all | train | val | test
+
+area_m2:                      # optional
+  basis: net                  # net (sum of rooms) | gross (outline)
+  target: 75                  # optional
+  min: 65                     # optional
+  max: 90                     # optional
+  hard: false                 # hard = plans outside [min, max] are excluded
+  weight: 2.0
+  require_known_area: false   # true: drop plans whose area is unknown
+
+rooms:                        # total number of rooms (front door excluded)
+  min: 4
+  max: 6
+  hard: true
+  weight: 1.0
+
+room_types:
+  bedroom:  {min: 2, max: 2, hard: true, weight: 2.0}
+  bathroom: "1+"              # shorthand: at least 1 (soft, weight 1)
+  kitchen:  1                 # shorthand: exactly 1
+  balcony:  {min: 1, hard: false, weight: 0.5}
+  study:    0                 # exactly 0 = must not be present
+
+entrance: {type: living, hard: false, weight: 0.5}     # optional: room behind the front door
+adjacent:                                              # optional: pairs that should be connected (graph edge)
+  - {pair: [kitchen, living], hard: false, weight: 0.5}
+
+ranking:
+  plausibility_weight: 0.3    # final = (1 - w) * constraint_score + w * plausibility
+  diversity: 0.2              # MMR lambda in [0, 1); 0 = plain ranking
+  near_misses: 5              # how many best plans that violate a hard constraint to show separately

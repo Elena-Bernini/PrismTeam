@@ -141,7 +141,7 @@ python scripts/03_build_graphs.py --mode full           # happy? run it on every
 Run everything in one go:
 
 ```bash
-python scripts/run_all.py --mode preview                # 01 → 12
+python scripts/run_all.py --mode preview                # 01 → 13
 python scripts/run_all.py --mode full --from 2 --to 5   # a range of phases
 ```
 
@@ -164,6 +164,7 @@ python scripts/run_all.py --mode full --from 2 --to 5   # a range of phases
 | 10 | `10_retrieval_partial.py` | masked queries (random, remove type/bedroom/smallest/largest, keep connected) → pool → compatibility re-ranking | is the original plan recovered? re-ranking gain |
 | 11 | `11_evaluate.py` | architectural metrics, Recall@K, Hit@K, MRR, front-door metrics, optional GED | summary table, metric vs rank |
 | 12 | `12_compare_pipelines.py` | merges phases 10–11 and other runs | final comparison |
+| 13 | `13_constraint_search.py` | k most plausible plans for a request (m², rooms, room types, entrance, adjacency) | top-k grid with explanations, near misses, area calibration |
 
 Common options for every script:
 
@@ -179,6 +180,8 @@ python scripts/06_train_gnn.py --mode full --set graph.model=gat --set graph.obj
 python scripts/08_vision_embed_index.py --mode full --encoders dinov2_base resnet50 clip_b32
 python scripts/08_vision_embed_index.py --mode full --encoders dinov2_base --image-source snapshot
 python scripts/10_retrieval_partial.py --mode full --set partial.strategy=keep_connected --set partial.keep_count=3
+python scripts/13_constraint_search.py --mode full --area 65-90 --rooms 4-6 --type bedroom=2 --type bathroom=1+ \
+    --hard type:bedroom --k 10                     # see docs/constraint_search.md
 python scripts/03_build_graphs.py --mode preview --set geometry.wall_dilation_px=4
 ```
 
@@ -213,9 +216,11 @@ src/prism/
   retrieval/        index.py (FAISS / NumPy), fusion.py (RRF), query_encoders.py, visual.py
   partial/          masking.py, compatibility.py
   evaluation/       metrics.py (architectural metrics, Recall@K, GED)
+  constraints/      spec.py, catalog.py (m², calibration, priors), scoring.py, search.py (phase 13)
 cluster/            config.sh, setup_env.sh, predownload_models.py, slurm/*.sbatch
 docs/relations.md   how adjacency, relations and the front door are computed
 docs/datasets.md    how RPLAN and ResPlan are combined in one gallery
+docs/constraint_search.md  phase 13: requests, scores, m² rules (RPLAN areas are calibrated estimates)
 tests/              unit tests (pytest)
 ```
 

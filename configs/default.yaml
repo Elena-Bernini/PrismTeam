@@ -198,6 +198,24 @@ partial:
     door: 0.10
     vector: 0.10
 
+# -----------------------------------------------------------------------------
+# Phase 13 - constraint search (k most plausible plans for a request)
+# -----------------------------------------------------------------------------
+constraints:
+  default_spec: configs/specs/example_2bed.yaml   # used by run_all.py
+  k: 10
+  resplan_units: m              # units of ResPlan.pkl coordinates; only used when a plan has no area / net_area
+                                # (the real 2026-07-28 release stores m² in area / net_area; its coordinates are
+                                # NOT metres - phase 13 reports the cross-check)
+  rplan_m2_per_px2: null        # null = calibrate from ResPlan room sizes; or a number to force the scale
+  calibration_types: [bedroom, bathroom, kitchen]
+  area_tolerance_ratio: 0.10    # default tolerance_m2 = ratio * target (or * interval midpoint)
+  plausibility_weight: 0.3
+  plausibility_components: {size: 0.4, shape: 0.2, reachability: 0.3, living_hub: 0.1}
+  diversity: 0.2                # MMR lambda (0 = off)
+  near_misses: 5
+  min_type_samples: 20          # minimum rooms of a type to fit its size/shape prior
+
 evaluation:
   relevance_adjacency_tau: 0.6  # relevance = same unified room composition AND adjacency sim >= tau
   ged:

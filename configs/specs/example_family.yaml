@@ -1,0 +1,33 @@
+# Example request for phase 13: a family flat with 3 bedrooms, 2 bathrooms and a balcony.
+name: family_flat
+k: 10
+split: all
+
+area_m2:
+  basis: net
+  target: 110
+  min: 95
+  max: 140
+  weight: 2.0
+
+rooms:
+  min: 6
+  max: 9
+  weight: 1.0
+
+room_types:
+  bedroom:  {min: 3, max: 3, hard: true, weight: 2.0}
+  bathroom: {min: 2, hard: true, weight: 1.5}
+  kitchen:  1
+  living:   "1+"
+  balcony:  {min: 1, weight: 1.0}
+
+entrance: {type: living, weight: 0.5}
+adjacent:
+  - {pair: [kitchen, living], weight: 0.5}
+  - {pair: [bedroom, bathroom], weight: 0.3}
+
+ranking:
+  plausibility_weight: 0.3
+  diversity: 0.2
+  near_misses: 5

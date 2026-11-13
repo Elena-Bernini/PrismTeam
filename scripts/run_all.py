@@ -1,12 +1,13 @@
 """Run several phases in sequence with the same options (works on Windows, macOS and Linux).
 
-    python scripts/run_all.py --mode preview                      # phases 01-12
+    python scripts/run_all.py --mode preview                      # phases 01-13
     python scripts/run_all.py --mode preview --from 3 --to 5      # only 03..05
     python scripts/run_all.py --mode full --env cluster --pack    # --pack is passed to phase 05
 
 Every other argument (``--set``, ``--device``, ``--n``, ``--env`` ...) is forwarded
 to each phase. Phases that need PyTorch are skipped with a warning when it is
-not installed (06, and the GNN / deep-vision parts of 07, 08, 10).
+not installed (06, and the GNN / deep-vision parts of 07, 08, 10). Phase 13
+(constraint search) is CPU-only and runs the request in constraints.default_spec.
 """
 
 import argparse
@@ -29,6 +30,7 @@ PHASES = {
     10: "10_retrieval_partial.py",
     11: "11_evaluate.py",
     12: "12_compare_pipelines.py",
+    13: "13_constraint_search.py",      # CPU only; uses constraints.default_spec
 }
 TORCH_ONLY = {6}
 
@@ -46,7 +48,7 @@ def main() -> None:
     """Parse the range of phases and run them one after the other."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--from", dest="start", type=int, default=1)
-    parser.add_argument("--to", dest="end", type=int, default=12)
+    parser.add_argument("--to", dest="end", type=int, default=max(PHASES))
     parser.add_argument("--pack", action="store_true", help="Forwarded to phase 05.")
     parser.add_argument("--keep-going", action="store_true", help="Continue after a failing phase.")
     args, forward = parser.parse_known_args()
